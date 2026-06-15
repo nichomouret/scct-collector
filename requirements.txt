@@ -1,0 +1,7 @@
+requests>=2.6
+flask>=3.0
+praw>=7.7
+# psycopg2-binary requis uniquement si tu utilises Postgres (DATABASE_URL).
+# Laissé actif pour le déploiement Railway avec Postgres ; inoffensif en SQLite.
+psycopg2-binary>=2.9
+# (Quiver retiré : plus de dataset Reddit. backtest_coverage.py teste Adanos via requests.)

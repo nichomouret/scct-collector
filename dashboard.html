@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCCT · Social — Scanner</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b22; --line:#2b3340; --txt:#e6edf3; --muted:#8b949e;
+    --q1:#d29922; --q2:#2ea043; --q3:#6e7681; --q4:#388bfd; --hot:#f85149;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;letter-spacing:.5px}
+  header .meta{color:var(--muted);font-size:12px}
+  header .pill{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:6px 14px;cursor:pointer;color:var(--txt)}
+  .wrap{padding:18px 22px;max-width:1200px}
+  .disclaimer{color:var(--muted);font-size:12px;margin:0 0 16px;border-left:3px solid var(--hot);padding-left:10px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td.tk{font-weight:700}
+  .score{font-weight:700}
+  .bar{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--hot),var(--q1),var(--q2));margin-top:3px}
+  .q{font-size:11px;padding:2px 8px;border-radius:10px;color:#0e1117;font-weight:600}
+  .qQ1{background:var(--q1)} .qQ2{background:var(--q2)} .qQ3{background:var(--q3);color:#fff} .qQ4{background:var(--q4)}
+  .src{font-size:11px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+  .cell{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-height:90px}
+  .cell h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .cell .chip{display:inline-block;background:#0e1117;border:1px solid var(--line);border-radius:6px;padding:3px 8px;margin:2px;font-size:12px}
+  .cQ2 h3{color:var(--q2)} .cQ1 h3{color:var(--q1)} .cQ4 h3{color:var(--q4)} .cQ3 h3{color:var(--muted)}
+  .empty{color:var(--muted);padding:30px;text-align:center}
+  .small{color:var(--muted);font-size:11px;margin-top:6px}
+  .analysis{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--q4);border-radius:8px;padding:12px 16px;margin-bottom:16px}
+  .analysis h3{margin:0 0 6px;font-size:13px;color:var(--q4)}
+  .analysis p{margin:0;color:var(--txt);font-size:13.5px;line-height:1.55}
+  .i{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;
+     border:1px solid var(--muted);color:var(--muted);font-size:10px;font-style:normal;margin-left:4px;cursor:help}
+  th .i{vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <h1>SCCT · SOCIAL — SCANNER</h1>
+  <span class="meta" id="meta">chargement…</span>
+  <button class="pill" onclick="load()">↻ Rafraîchir</button>
+</header>
+<div class="wrap">
+  <p class="disclaimer">Outil de DÉTECTION uniquement. Pas un conseil financier. Vérifie chaque candidat manuellement (float, short interest, catalyseur, contexte) avant tout trade. Le score n'est pas une garantie.</p>
+
+  <div id="analysis" class="analysis">
+    <h3>🤖 Analyse Claude</h3>
+    <p id="analysisText">…</p>
+  </div>
+
+  <table id="tbl">
+    <thead><tr>
+      <th>Ticker</th>
+      <th>Source<i class="i" title="watchlist = ta liste micro-cap screenée ; découverte = remonté du top mentions ApeWisdom">i</i></th>
+      <th>C1<i class="i" title="Spike de volume de mentions : accélération anormale vs la veille (0–1). Condition d'entrée — pas de spike, pas de signal.">i</i></th>
+      <th>C2<i class="i" title="Signature de coordination (0–1) : concentration temporelle (burstiness), peu d'auteurs, multi-subreddits, textes similaires. Le cœur discriminant — sépare une vraie coordination d'un buzz organique.">i</i></th>
+      <th>C4<i class="i" title="Pression de float (0–1) : float réduit + short interest élevé = le « carburant » du squeeze. Un gros float (ex. GME) tombe à ~0.">i</i></th>
+      <th>C5<i class="i" title="Catalyseur daté (0/1) : présence d'un 8-K matériel ou earnings près de l'événement. Sert à placer le quadrant (axe fondamental), pas à gonfler le score.">i</i></th>
+      <th>Float (M)<i class="i" title="Free float en millions d'actions (Ortex). Plus c'est petit, plus le titre est squeezable.">i</i></th>
+      <th>SI%<i class="i" title="Short interest en % du free float (Ortex). Élevé = beaucoup de vendeurs à découvert à racheter.">i</i></th>
+      <th>SCCT<i class="i" title="Score composite 0–100 = C1·0.15 + C2·0.50 + C3·0.10 + C4·0.25 (C5 → quadrant). Seuil de signal ≈ 40–45.">i</i></th>
+      <th>Quadrant<i class="i" title="Q1 pump pur (social, sans fondamental) · Q2 convergence (social + catalyseur = idéal) · Q3 bruit (à filtrer) · Q4 rerating (mouvement fondamental, hors périmètre SCCT).">i</i></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div id="emptymsg"></div>
+
+  <div class="grid">
+    <div class="cell cQ2"><h3>Q2 — Convergence (idéal)</h3><div id="q2"></div></div>
+    <div class="cell cQ1"><h3>Q1 — Pump coordonné pur</h3><div id="q1"></div></div>
+    <div class="cell cQ4"><h3>Q4 — Rerating fondamental (hors SCCT)</h3><div id="q4"></div></div>
+    <div class="cell cQ3"><h3>Q3 — Bruit (à filtrer)</h3><div id="q3"></div></div>
+  </div>
+  <p class="small">Score = C1 (volume) 0.15 · C2 (coordination) 0.50 · C3 0.10 · C4 (float) 0.25 · C5 → quadrant. Données : ApeWisdom + Adanos + Ortex + SEC.</p>
+</div>
+
+<script>
+const fmt = v => (v===null||v===undefined||v==="") ? "–" : (typeof v==="number" ? v.toFixed(2) : v);
+function qClass(q){ return q&&q.includes("Q1")?"qQ1":q&&q.includes("Q2")?"qQ2":q&&q.includes("Q4")?"qQ4":"qQ3"; }
+async function load(){
+  let data;
+  try{ data = await (await fetch('scan_latest.json?'+Date.now())).json(); }
+  catch(e){ document.getElementById('meta').textContent = "scan_latest.json introuvable — lance scct_scan.py puis sers ce dossier."; return; }
+  const sig = (data.signals||[]);
+  document.getElementById('meta').textContent =
+    `${sig.length} signaux ≥ ${data.min_score} · ${data.n_universe} candidats · ${new Date(data.generated_utc).toLocaleString('fr-FR')}`;
+  document.getElementById('analysisText').textContent = data.analysis || "—";
+  const rows = document.getElementById('rows'); rows.innerHTML='';
+  const buckets={q1:[],q2:[],q3:[],q4:[]};
+  (sig.length?sig:[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="tk">${r.ticker}</td><td class="src">${r.src||''}</td>
+      <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td><td>${fmt(r.C5)}</td>
+      <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
+      <td class="score">${r.SCCT}<div class="bar" style="width:${Math.min(100,r.SCCT)}%"></div></td>
+      <td><span class="q ${qClass(r.quadrant)}">${(r.quadrant||'').split(' ')[0]}</span></td>`;
+    rows.appendChild(tr);
+    const k = r.quadrant&&r.quadrant.includes('Q1')?'q1':r.quadrant&&r.quadrant.includes('Q2')?'q2':r.quadrant&&r.quadrant.includes('Q4')?'q4':'q3';
+    buckets[k].push(r.ticker);
+  });
+  document.getElementById('emptymsg').innerHTML = sig.length? '' :
+    '<div class="empty">Aucun signal au-dessus du seuil. En période sans squeeze, c\'est le comportement attendu.</div>';
+  for(const k of ['q1','q2','q3','q4'])
+    document.getElementById(k).innerHTML = buckets[k].length? buckets[k].map(t=>`<span class="chip">${t}</span>`).join('') : '<span class="src">—</span>';
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+.env
+*.db
+logs/
+scan_latest.json
+*.csv
+tickers.txt
+__pycache__/
+*.pyc
