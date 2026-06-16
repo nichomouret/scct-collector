@@ -57,7 +57,11 @@ ETF_BLOCK = {"SPY", "QQQ", "VOO", "IVV", "VTI", "SGOV", "USO", "USO", "SOXL", "S
 # Faux tickers / mots courants vus dans le bruit ApeWisdom (en plus de STOPLIST)
 JUNK = STOPLIST | {"API", "JUST", "WTI", "WH", "UP", "IT", "DC", "EU", "UAE", "YOU",
                    "AM", "ES", "OS", "NOW", "ANY", "GO", "AI", "OR", "BE", "ARE",
-                   "DJT", "WTI", "UAE", "EU"}
+                   "DJT", "WTI", "UAE", "EU", "VT", "VXUS", "BND", "BNDX", "VYM",
+                   "SCHD", "VEA", "VWO", "AGG", "JEPI", "JEPQ", "SCHG"}
+# Filtre par NOM de société : exclut tout ETF/fonds quel que soit le ticker
+ETF_NAME_HINTS = ("etf", "etn", " fund", "index fund", "vanguard", "ishares",
+                  "spdr", "proshares", "direxion", "invesco", " trust etf")
 
 
 def clamp(x, lo=0.0, hi=1.0):
@@ -285,6 +289,10 @@ def main():
             n_junk += 1
             continue
         mentions, prev, name = d.get("mentions"), d.get("prev"), d.get("name")
+        # filtre ETF/fonds par nom de société (robuste, quel que soit le ticker)
+        if name and any(h in name.lower() for h in ETF_NAME_HINTS):
+            n_junk += 1
+            continue
         c1 = c1_spike(mentions, prev, args.min_mentions)
         c4, float_m, si, si_usd = c4_live(tk, store)
         # filtre 2 : float inconnu (throttlé/délisté) -> on ne peut pas évaluer -> exclu
