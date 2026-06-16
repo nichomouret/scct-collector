@@ -74,7 +74,8 @@ def apewisdom_discovery(pages):
         for it in data:
             tk = str(it.get("ticker", "")).upper()
             if tk:
-                out[tk] = {"mentions": it.get("mentions"), "prev": it.get("mentions_24h_ago")}
+                out[tk] = {"mentions": it.get("mentions"), "prev": it.get("mentions_24h_ago"),
+                           "name": it.get("name")}
         time.sleep(0.3)
     return out
 
@@ -181,11 +182,13 @@ def claude_analysis(signals, n_universe):
             "max_tokens": 600,
             "messages": [{"role": "user", "content":
                 "Tu es analyste pour SCCT, un détecteur de squeezes micro-cap US via coordination "
-                "sociale Reddit. Voici le scan courant (score 0-100 ; C1=spike volume, C2=coordination, "
-                "C4=pression de float, C5=catalyseur ; quadrants Q1 pump pur / Q2 convergence idéale / "
-                "Q3 bruit / Q4 rerating fondamental). Rédige une analyse FR de 3-4 phrases : ce qui "
-                "ressort, les pièges, et s'il y a vraiment quelque chose à surveiller. Sois sobre et "
-                "factuel, rappelle que c'est de la détection, pas un conseil. Données : "
+                "sociale Reddit (score 0-100 ; C1=spike volume, C2=coordination, C4=pression de float, "
+                "C5=catalyseur ; quadrants Q1 pump pur / Q2 convergence idéale / Q3 bruit / Q4 rerating). "
+                "Rédige en FRANÇAIS, format STRICT, SANS markdown (pas de #, pas de **, pas de gras) :\n"
+                "Ligne 1 : 'VERDICT: ' suivi d'UNE phrase (y a-t-il quelque chose à regarder, oui/non et pourquoi).\n"
+                "Puis 2 à 4 lignes, chacune commençant par '- ', courtes (1 phrase max) : le ou les "
+                "candidats notables, les pièges, ce qu'il faut surveiller. Sobre, factuel. "
+                "Termine par une ligne '- Rappel: détection algorithmique, pas un conseil.' Données : "
                 + _json.dumps({"n_universe": n_universe, "signals": top}, ensure_ascii=False)}],
         }
         r = requests.post("https://api.anthropic.com/v1/messages",
@@ -246,10 +249,11 @@ def main():
         if tk in JUNK or tk in ETF_BLOCK:
             n_junk += 1
             continue
-        mentions, prev = d.get("mentions"), d.get("prev")
+        mentions, prev, name = d.get("mentions"), d.get("prev"), d.get("name")
         if mentions is None:  # watchlist sans data découverte -> interroge Adanos
             js = adanos_stock(tk)
             if js:
+                name = name or js.get("company_name")
                 dt_rows = js.get("daily_trend") or []
                 if dt_rows:
                     # jour le plus récent vs moyenne de la semaine précédente (pas total 7j !)
@@ -276,7 +280,7 @@ def main():
         c5 = c5_live(tk)
         sc = score(c1, c2, c4)
         q = quadrant(c1, c5)
-        results.append({"ticker": tk, "src": d.get("src", "?"), "mentions": mentions,
+        results.append({"ticker": tk, "name": name, "src": d.get("src", "?"), "mentions": mentions,
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
                         "short_int": si, "SCCT": sc, "quadrant": q})
         time.sleep(0.2)

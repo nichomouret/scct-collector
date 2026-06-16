@@ -6,108 +6,188 @@
 <title>SCCT · Social — Scanner</title>
 <style>
   :root{
-    --bg:#0e1117; --panel:#161b22; --line:#2b3340; --txt:#e6edf3; --muted:#8b949e;
+    --bg:#0e1117; --panel:#161b22; --panel2:#1c2230; --line:#2b3340; --txt:#e6edf3; --muted:#8b949e;
     --q1:#d29922; --q2:#2ea043; --q3:#6e7681; --q4:#388bfd; --hot:#f85149;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-  header{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
-  header h1{font-size:18px;margin:0;letter-spacing:.5px}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{padding:14px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;letter-spacing:.5px;font-weight:700}
   header .meta{color:var(--muted);font-size:12px}
-  header .pill{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:6px 14px;cursor:pointer;color:var(--txt)}
-  .wrap{padding:18px 22px;max-width:1200px}
-  .disclaimer{color:var(--muted);font-size:12px;margin:0 0 16px;border-left:3px solid var(--hot);padding-left:10px}
-  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
-  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
-  th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+  header .pill{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:7px 16px;cursor:pointer;color:var(--txt);font-size:13px}
+  .wrap{padding:18px 22px;max-width:1100px;margin:0 auto}
+
+  /* --- BANDEAU VERDICT --- */
+  .verdict{border-radius:12px;padding:18px 22px;margin-bottom:16px;display:flex;align-items:center;gap:16px}
+  .verdict .dot{font-size:30px;line-height:1}
+  .verdict .vtxt{flex:1}
+  .verdict .vtitle{font-size:19px;font-weight:700;margin:0 0 2px}
+  .verdict .vsub{font-size:13px;opacity:.85;margin:0}
+  .v-green{background:rgba(46,160,67,.12);border:1px solid var(--q2)}
+  .v-green .vtitle{color:var(--q2)}
+  .v-orange{background:rgba(210,153,34,.12);border:1px solid var(--q1)}
+  .v-orange .vtitle{color:var(--q1)}
+  .v-red{background:rgba(248,81,73,.12);border:1px solid var(--hot)}
+  .v-red .vtitle{color:var(--hot)}
+
+  /* --- ANALYSE --- */
+  .analysis{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:18px}
+  .analysis h3{margin:0 0 10px;font-size:12px;letter-spacing:.5px;color:var(--q4);text-transform:uppercase}
+  .analysis .verdline{font-size:14.5px;font-weight:600;margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .analysis ul{margin:0;padding-left:4px;list-style:none}
+  .analysis li{position:relative;padding:4px 0 4px 20px;color:var(--txt);font-size:13.5px}
+  .analysis li::before{content:"›";position:absolute;left:4px;color:var(--q4);font-weight:700}
+
+  /* --- TABLE --- */
+  .sec-title{font-size:12px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:0 0 8px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:visible}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;position:relative}
   tr:last-child td{border-bottom:none}
-  td.tk{font-weight:700}
-  .score{font-weight:700}
-  .bar{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--hot),var(--q1),var(--q2));margin-top:3px}
-  .q{font-size:11px;padding:2px 8px;border-radius:10px;color:#0e1117;font-weight:600}
+  tr.hot{background:rgba(46,160,67,.06)}
+  tr.warm{background:rgba(210,153,34,.05)}
+  td.tk{font-weight:700;font-size:15px}
+  .tkname{font-size:11px;color:var(--muted);font-weight:400;margin-top:1px;max-width:160px;white-space:normal}
+  .scorewrap{min-width:90px}
+  .score{font-weight:700;font-size:15px}
+  .bar{height:5px;border-radius:3px;background:#30363d;margin-top:4px;overflow:hidden}
+  .bar>span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--hot),var(--q1),var(--q2))}
+  .q{font-size:11px;padding:3px 9px;border-radius:10px;color:#0e1117;font-weight:700;display:inline-block}
   .qQ1{background:var(--q1)} .qQ2{background:var(--q2)} .qQ3{background:var(--q3);color:#fff} .qQ4{background:var(--q4)}
   .src{font-size:11px;color:var(--muted)}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
-  .cell{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-height:90px}
-  .cell h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-  .cell .chip{display:inline-block;background:#0e1117;border:1px solid var(--line);border-radius:6px;padding:3px 8px;margin:2px;font-size:12px}
-  .cQ2 h3{color:var(--q2)} .cQ1 h3{color:var(--q1)} .cQ4 h3{color:var(--q4)} .cQ3 h3{color:var(--muted)}
-  .empty{color:var(--muted);padding:30px;text-align:center}
-  .small{color:var(--muted);font-size:11px;margin-top:6px}
-  .analysis{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--q4);border-radius:8px;padding:12px 16px;margin-bottom:16px}
-  .analysis h3{margin:0 0 6px;font-size:13px;color:var(--q4)}
-  .analysis p{margin:0;color:var(--txt);font-size:13.5px;line-height:1.55}
-  .i{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;
-     border:1px solid var(--muted);color:var(--muted);font-size:10px;font-style:normal;margin-left:4px;cursor:help}
-  th .i{vertical-align:middle}
+  .i{display:inline-block;width:15px;height:15px;line-height:15px;text-align:center;border-radius:50%;
+     border:1px solid var(--muted);color:var(--muted);font-size:10px;font-style:normal;margin-left:5px;cursor:help;position:relative}
+  .i:hover{background:var(--q4);color:#fff;border-color:var(--q4)}
+  .i:hover::after{content:attr(data-tip);position:absolute;left:50%;top:22px;transform:translateX(-50%);
+     width:230px;background:#0b0e14;color:var(--txt);border:1px solid var(--line);border-radius:8px;
+     padding:9px 11px;font-size:11.5px;font-weight:400;line-height:1.45;letter-spacing:0;text-transform:none;
+     white-space:normal;z-index:100;box-shadow:0 6px 20px rgba(0,0,0,.55)}
+  th:nth-last-child(-n+2) .i:hover::after{left:auto;right:0;transform:none}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0 8px}
+  .cell{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-height:74px}
+  .cell h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .cell .chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:3px 9px;margin:2px;font-size:13px;font-weight:600}
+  .cQ2 h4{color:var(--q2)} .cQ1 h4{color:var(--q1)} .cQ4 h4{color:var(--q4)} .cQ3 h4{color:var(--muted)}
+  .small{color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5}
+  .disc{color:var(--muted);font-size:11px;border-left:3px solid var(--hot);padding-left:10px;margin:16px 0 0}
 </style>
 </head>
 <body>
 <header>
-  <h1>SCCT · SOCIAL — SCANNER</h1>
+  <h1>SCCT · SOCIAL</h1>
   <span class="meta" id="meta">chargement…</span>
   <button class="pill" onclick="load()">↻ Rafraîchir</button>
 </header>
 <div class="wrap">
-  <p class="disclaimer">Outil de DÉTECTION uniquement. Pas un conseil financier. Vérifie chaque candidat manuellement (float, short interest, catalyseur, contexte) avant tout trade. Le score n'est pas une garantie.</p>
 
-  <div id="analysis" class="analysis">
-    <h3>🤖 Analyse Claude</h3>
-    <p id="analysisText">…</p>
+  <div id="verdict" class="verdict v-green">
+    <div class="dot" id="vdot">🟢</div>
+    <div class="vtxt"><p class="vtitle" id="vtitle">…</p><p class="vsub" id="vsub"></p></div>
   </div>
 
+  <div class="analysis">
+    <h3>🤖 Analyse Claude</h3>
+    <p class="verdline" id="verdline"></p>
+    <ul id="analysisList"></ul>
+  </div>
+
+  <p class="sec-title">Candidats détectés (triés par score)</p>
   <table id="tbl">
     <thead><tr>
-      <th>Ticker</th>
-      <th>Source<i class="i" title="watchlist = ta liste micro-cap screenée ; découverte = remonté du top mentions ApeWisdom">i</i></th>
-      <th>C1<i class="i" title="Spike de volume de mentions : accélération anormale vs la veille (0–1). Condition d'entrée — pas de spike, pas de signal.">i</i></th>
-      <th>C2<i class="i" title="Signature de coordination (0–1) : concentration temporelle (burstiness), peu d'auteurs, multi-subreddits, textes similaires. Le cœur discriminant — sépare une vraie coordination d'un buzz organique.">i</i></th>
-      <th>C4<i class="i" title="Pression de float (0–1) : float réduit + short interest élevé = le « carburant » du squeeze. Un gros float (ex. GME) tombe à ~0.">i</i></th>
-      <th>C5<i class="i" title="Catalyseur daté (0/1) : présence d'un 8-K matériel ou earnings près de l'événement. Sert à placer le quadrant (axe fondamental), pas à gonfler le score.">i</i></th>
-      <th>Float (M)<i class="i" title="Free float en millions d'actions (Ortex). Plus c'est petit, plus le titre est squeezable.">i</i></th>
-      <th>SI%<i class="i" title="Short interest en % du free float (Ortex). Élevé = beaucoup de vendeurs à découvert à racheter.">i</i></th>
-      <th>SCCT<i class="i" title="Score composite 0–100 = C1·0.15 + C2·0.50 + C3·0.10 + C4·0.25 (C5 → quadrant). Seuil de signal ≈ 40–45.">i</i></th>
-      <th>Quadrant<i class="i" title="Q1 pump pur (social, sans fondamental) · Q2 convergence (social + catalyseur = idéal) · Q3 bruit (à filtrer) · Q4 rerating (mouvement fondamental, hors périmètre SCCT).">i</i></th>
+      <th>Titre</th>
+      <th>D'où<i class="i" data-tip="watchlist = ta liste micro-cap ; découverte = remonté du buzz Reddit (ApeWisdom)">i</i></th>
+      <th>Volume<i class="i" data-tip="C1 — flambée de mentions vs la veille (0–1). Pas de flambée = pas de signal.">i</i></th>
+      <th>Coordin.<i class="i" data-tip="C2 — signature de coordination (0–1) : posts groupés, peu d'auteurs, multi-subreddits, textes similaires. Le cœur du modèle : sépare une vraie manip d'un buzz spontané.">i</i></th>
+      <th>Carburant<i class="i" data-tip="C4 — pression de float (0–1) : float réduit + short interest élevé = potentiel de squeeze. Gros float = ~0.">i</i></th>
+      <th>Catalys.<i class="i" data-tip="C5 — catalyseur daté (0/1) : 8-K ou earnings près de l'événement. Sert à placer le quadrant.">i</i></th>
+      <th>Float (M)<i class="i" data-tip="Free float en millions d'actions. Plus c'est petit, plus c'est squeezable.">i</i></th>
+      <th>Short %<i class="i" data-tip="Short interest en % du float. Élevé = beaucoup de vendeurs à découvert à racheter.">i</i></th>
+      <th>Score<i class="i" data-tip="Score global 0–100. Au-delà de ~60 et en Q2 = à regarder sérieusement.">i</i></th>
+      <th>Type<i class="i" data-tip="Q2 convergence (idéal) · Q1 pump pur (risqué) · Q3 bruit · Q4 fondamental (hors scope).">i</i></th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
   <div id="emptymsg"></div>
 
   <div class="grid">
-    <div class="cell cQ2"><h3>Q2 — Convergence (idéal)</h3><div id="q2"></div></div>
-    <div class="cell cQ1"><h3>Q1 — Pump coordonné pur</h3><div id="q1"></div></div>
-    <div class="cell cQ4"><h3>Q4 — Rerating fondamental (hors SCCT)</h3><div id="q4"></div></div>
-    <div class="cell cQ3"><h3>Q3 — Bruit (à filtrer)</h3><div id="q3"></div></div>
+    <div class="cell cQ2"><h4>🟢 Q2 — Convergence (idéal)</h4><div id="q2"></div></div>
+    <div class="cell cQ1"><h4>🟡 Q1 — Pump pur (risqué)</h4><div id="q1"></div></div>
+    <div class="cell cQ4"><h4>🔵 Q4 — Fondamental (hors scope)</h4><div id="q4"></div></div>
+    <div class="cell cQ3"><h4>⚪ Q3 — Bruit (à ignorer)</h4><div id="q3"></div></div>
   </div>
-  <p class="small">Score = C1 (volume) 0.15 · C2 (coordination) 0.50 · C3 0.10 · C4 (float) 0.25 · C5 → quadrant. Données : ApeWisdom + Adanos + Ortex + SEC.</p>
+
+  <p class="small">Score = Volume·0,15 + Coordination·0,50 + C3·0,10 + Carburant·0,25 (Catalyseur → type). Sources : ApeWisdom (mentions) · Adanos (coordination) · Ortex (float/short) · SEC (catalyseur).</p>
+  <p class="disc">Outil de DÉTECTION uniquement — pas un conseil financier. Vérifie chaque candidat à la main (float, short interest, catalyseur, contexte) avant tout trade. Le score n'est pas une garantie.</p>
 </div>
 
 <script>
 const fmt = v => (v===null||v===undefined||v==="") ? "–" : (typeof v==="number" ? v.toFixed(2) : v);
 function qClass(q){ return q&&q.includes("Q1")?"qQ1":q&&q.includes("Q2")?"qQ2":q&&q.includes("Q4")?"qQ4":"qQ3"; }
+function qShort(q){ return (q||"").split(" ")[0]; }
+
+function setVerdict(signals){
+  const el=document.getElementById('verdict'), dot=document.getElementById('vdot'),
+        t=document.getElementById('vtitle'), s=document.getElementById('vsub');
+  const actionable=signals.filter(r=>r.quadrant&&(r.quadrant.includes('Q1')||r.quadrant.includes('Q2')));
+  const q2strong=actionable.filter(r=>r.quadrant.includes('Q2')&&r.SCCT>=60).sort((a,b)=>b.SCCT-a.SCCT);
+  const warm=actionable.filter(r=>r.SCCT>=55).sort((a,b)=>b.SCCT-a.SCCT);
+  el.className="verdict v-green";
+  if(q2strong.length){
+    el.className="verdict v-red"; dot.textContent="🔴";
+    t.textContent="SIGNAL — "+q2strong[0].ticker+" (score "+q2strong[0].SCCT+", convergence Q2)";
+    s.textContent="Convergence social + carburant. À examiner sérieusement (vérif manuelle obligatoire).";
+  } else if(warm.length){
+    el.className="verdict v-orange"; dot.textContent="🟠";
+    t.textContent="À surveiller — "+warm[0].ticker+" (score "+warm[0].SCCT+", "+qShort(warm[0].quadrant)+")";
+    s.textContent="Signal partiel, pas de convergence idéale. Garder à l'œil, ne pas se précipiter.";
+  } else {
+    dot.textContent="🟢";
+    t.textContent="Rien à signaler";
+    s.textContent="Aucun squeeze social en cours. C'est l'état normal en période calme — le système veille.";
+  }
+}
+
+function renderAnalysis(txt){
+  const vl=document.getElementById('verdline'), ul=document.getElementById('analysisList');
+  ul.innerHTML=""; vl.textContent="";
+  if(!txt){ vl.textContent="—"; return; }
+  // nettoie le markdown résiduel et découpe en lignes
+  const clean=txt.replace(/\*\*/g,"").replace(/^#+\s*/gm,"");
+  const lines=clean.split(/\n|(?=- )|(?=• )/).map(l=>l.trim()).filter(Boolean);
+  lines.forEach(l=>{
+    if(/^verdict\s*:/i.test(l)){ vl.textContent=l.replace(/^verdict\s*:\s*/i,""); }
+    else if(/^[-•]\s*/.test(l)){ const li=document.createElement('li'); li.textContent=l.replace(/^[-•]\s*/,""); ul.appendChild(li); }
+    else if(l.length>3){ const li=document.createElement('li'); li.textContent=l; ul.appendChild(li); }
+  });
+  if(!vl.textContent && ul.children.length){ vl.textContent=ul.firstChild.textContent; ul.removeChild(ul.firstChild); }
+}
+
 async function load(){
   let data;
-  try{ data = await (await fetch('scan_latest.json?'+Date.now())).json(); }
-  catch(e){ document.getElementById('meta').textContent = "scan_latest.json introuvable — lance scct_scan.py puis sers ce dossier."; return; }
-  const sig = (data.signals||[]);
+  try{ data=await (await fetch('scan_latest.json?'+Date.now())).json(); }
+  catch(e){ document.getElementById('meta').textContent="scan en cours de génération…"; return; }
+  const sig=data.signals||[];
   document.getElementById('meta').textContent =
-    `${sig.length} signaux ≥ ${data.min_score} · ${data.n_universe} candidats · ${new Date(data.generated_utc).toLocaleString('fr-FR')}`;
-  document.getElementById('analysisText').textContent = data.analysis || "—";
-  const rows = document.getElementById('rows'); rows.innerHTML='';
+    `${sig.length} candidats · scan du ${data.generated_utc?new Date(data.generated_utc).toLocaleString('fr-FR'):'—'}`;
+  setVerdict(sig);
+  renderAnalysis(data.analysis);
+
+  const rows=document.getElementById('rows'); rows.innerHTML="";
   const buckets={q1:[],q2:[],q3:[],q4:[]};
-  (sig.length?sig:[]).forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="tk">${r.ticker}</td><td class="src">${r.src||''}</td>
+  sig.forEach(r=>{
+    const q=qShort(r.quadrant);
+    const cls = q==="Q2"?"hot":q==="Q1"?"warm":"";
+    const tr=document.createElement('tr'); if(cls) tr.className=cls;
+    tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td><td class="src">${r.src||''}</td>
       <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td><td>${fmt(r.C5)}</td>
       <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
-      <td class="score">${r.SCCT}<div class="bar" style="width:${Math.min(100,r.SCCT)}%"></div></td>
-      <td><span class="q ${qClass(r.quadrant)}">${(r.quadrant||'').split(' ')[0]}</span></td>`;
+      <td class="scorewrap"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
+      <td><span class="q ${qClass(r.quadrant)}">${q}</span></td>`;
     rows.appendChild(tr);
-    const k = r.quadrant&&r.quadrant.includes('Q1')?'q1':r.quadrant&&r.quadrant.includes('Q2')?'q2':r.quadrant&&r.quadrant.includes('Q4')?'q4':'q3';
-    buckets[k].push(r.ticker);
+    const k=q==="Q1"?"q1":q==="Q2"?"q2":q==="Q4"?"q4":"q3"; buckets[k].push(r.ticker);
   });
-  document.getElementById('emptymsg').innerHTML = sig.length? '' :
-    '<div class="empty">Aucun signal au-dessus du seuil. En période sans squeeze, c\'est le comportement attendu.</div>';
+  document.getElementById('emptymsg').innerHTML = sig.length? "" :
+    '<div style="padding:24px;text-align:center;color:var(--muted)">Aucun candidat au-dessus du seuil. Période calme — comportement normal.</div>';
   for(const k of ['q1','q2','q3','q4'])
     document.getElementById(k).innerHTML = buckets[k].length? buckets[k].map(t=>`<span class="chip">${t}</span>`).join('') : '<span class="src">—</span>';
 }
