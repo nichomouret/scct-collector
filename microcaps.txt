@@ -1,35 +1,69 @@
-# SCCT-Social — univers de départ (pool de CANDIDATS à valider)
-# ⚠ Ce n'est PAS un écran short-interest vérifié. Le script classe chaque nom
-#   (buzz Adanos × mouvement prix) en famille 1/2, 3, 4 ou hors-échantillon.
-#   Pour le backtest définitif : remplacer par un export Finviz
-#   (Market Cap = Micro/Small, Float < 50M, Short Float > 20%).
-#
-# --- Ancres connues (familles 1/2, doivent scorer haut) ---
-OPEN
-KSS
-DNUT
-GME
-AMC
-OCC
-#
-# --- Candidats small/micro souvent discutés (retail / short squeeze) ---
-SOUN
-RGTI
-QBTS
-BBAI
-IONQ
-LUNR
-ACHR
-NVAX
-CLOV
-MULN
-FUBO
-WKHS
-CHPT
-PLUG
-FCEL
-BLNK
-GERN
-ATER
-CENN
-GNS
+# SCCT-Social — watchlist micro-cap (export Finviz : Micro-cap · Float <50M · Short >20%)
+# Buzz-gated : seuls les noms qui buzzent (ApeWisdom) sont scorés -> tu peux en ajouter sans coût.
+AIM
+ARCT
+ARQQ
+ASTC
+ATPC
+BATL
+BRTX
+BZFD
+DERM
+DFDV
+ELOX
+ELPW
+FABC
+FBIO
+FGL
+FLWS
+FRMM
+FTH
+HURA
+IOTR
+JACK
+KPTI
+KULR
+LENZ
+LFVN
+LNKS
+LOVE
+MASK
+MDCX
+MED
+MNTS
+NCPL
+NCT
+NEXR
+NRDY
+NTCL
+OLOX
+PLCE
+PRFX
+PROP
+PUSA
+QCLS
+RAIN
+RKDA
+RKTO
+RNA
+RTB
+SDEV
+SEAT
+SHPH
+SLXN
+SNBR
+SNGX
+SNYR
+SPRC
+STIM
+SUGP
+TBCH
+TTEC
+UPXI
+UZX
+VCIG
+VIVO
+WGRX
+WW
+YYGH
+ZCMD

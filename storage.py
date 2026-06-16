@@ -33,6 +33,11 @@ CREATE TABLE IF NOT EXISTS mentions (
 );
 CREATE INDEX IF NOT EXISTS idx_mentions_tk ON mentions(ticker, fetched_utc);
 CREATE INDEX IF NOT EXISTS idx_mentions_fetched ON mentions(fetched_utc);
+
+CREATE TABLE IF NOT EXISTS ticker_meta (
+    ticker TEXT PRIMARY KEY,
+    float_m REAL, si REAL, si_usd REAL, name TEXT, updated_utc REAL
+);
 """
 
 DDL_PG = DDL_SQLITE.replace("REAL", "DOUBLE PRECISION")
@@ -99,6 +104,30 @@ class Store:
     # rétro-compat
     def upsert(self, rows: Iterable[dict]) -> int:
         return self.upsert_posts(rows)
+
+    def meta_get(self, ticker: str, max_age_days: float = 7.0):
+        """Renvoie le cache float/SI d'un ticker s'il est récent, sinon None."""
+        import time as _t
+        cur = self.conn.cursor()
+        cur.execute(f"SELECT ticker, float_m, si, si_usd, name, updated_utc "
+                    f"FROM ticker_meta WHERE ticker = {self.ph}", (ticker.upper(),))
+        row = cur.fetchone()
+        if not row:
+            return None
+        updated = row[5] or 0
+        if (_t.time() - updated) > max_age_days * 86400:
+            return None
+        return {"float_m": row[1], "si": row[2], "si_usd": row[3], "name": row[4]}
+
+    def meta_put(self, ticker: str, float_m, si, si_usd, name):
+        import time as _t
+        cur = self.conn.cursor()
+        sql = (f"INSERT INTO ticker_meta (ticker, float_m, si, si_usd, name, updated_utc) "
+               f"VALUES ({self.ph},{self.ph},{self.ph},{self.ph},{self.ph},{self.ph}) "
+               f"ON CONFLICT (ticker) DO UPDATE SET float_m=excluded.float_m, si=excluded.si, "
+               f"si_usd=excluded.si_usd, name=excluded.name, updated_utc=excluded.updated_utc")
+        cur.execute(sql, (ticker.upper(), float_m, si, si_usd, name, _t.time()))
+        self.conn.commit()
 
     def count(self, table: str = "posts") -> int:
         cur = self.conn.cursor()

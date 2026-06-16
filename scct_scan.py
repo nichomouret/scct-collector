@@ -38,6 +38,10 @@ import c2_coordination as C2
 import ortex_c4_pull as C4
 import c5_catalyst as C5
 from ticker_extractor import STOPLIST
+try:
+    from storage import Store
+except Exception:
+    Store = None
 
 ADANOS_KEY = os.getenv("ADANOS_API_KEY", "")
 ADANOS_BASE = os.getenv("ADANOS_BASE", "https://api.adanos.org/reddit/stocks")
@@ -142,11 +146,18 @@ def c2_live(tk, want_c2):
     return round((burst90 + top5 + min(1.0, n_subs / 6) + lex) / 4, 3)
 
 
-def c4_live(tk):
-    ox = C4.fetch_ortex(tk)
-    fl = ox["float_shares"]
-    sf, ss, sb, c4 = C4.compute_c4(fl, ox["si"], ox["borrow"])
-    return c4, (round(fl / 1e6, 1) if fl else None), ox["si"], ox.get("si_usd")
+def c4_live(tk, store=None):
+    # cache float/SI (Postgres) : Ortex n'est appelé que si absent ou périmé (>7j)
+    cached = store.meta_get(tk) if store else None
+    if cached and cached.get("float_m") is not None:
+        fl = cached["float_m"] * 1e6; si = cached.get("si"); si_usd = cached.get("si_usd")
+    else:
+        ox = C4.fetch_ortex(tk)
+        fl, si, si_usd = ox["float_shares"], ox["si"], ox.get("si_usd")
+        if store and fl is not None:
+            store.meta_put(tk, fl / 1e6, si, si_usd, None)
+    sf, ss, sb, c4 = C4.compute_c4(fl, si, None)
+    return c4, (round(fl / 1e6, 1) if fl else None), si, si_usd
 
 
 def c5_live(tk):
@@ -211,59 +222,71 @@ def quadrant(c1, c5):
 
 def main():
     ap = argparse.ArgumentParser()
+    _i = lambda k, d: int(os.getenv(k, str(d)))
+    _f = lambda k, d: float(os.getenv(k, str(d)))
     ap.add_argument("--watchlist", default="microcaps.txt")
-    ap.add_argument("--discovery", type=int, default=50, help="top N ApeWisdom (0 = off)")
-    ap.add_argument("--discovery-pages", type=int, default=5)
+    ap.add_argument("--discovery", type=int, default=_i("DISCOVERY", 80), help="top N ApeWisdom (0 = off)")
+    ap.add_argument("--discovery-pages", type=int, default=_i("DISCOVERY_PAGES", 10))
     ap.add_argument("--no-c2", action="store_true", help="ignorer C2 (si pas de plan Adanos Pro)")
-    ap.add_argument("--min-score", type=float, default=40.0)
-    ap.add_argument("--min-mentions", type=int, default=20, help="plancher volume pour C1 (anti-bruit)")
-    ap.add_argument("--max-float-m", type=float, default=150.0, help="plafond free float (M) — cibles micro/small-cap")
-    ap.add_argument("--max-si-usd", type=float, default=1.5e9, help="plafond short interest en $ (au-dessus = mega-cap)")
+    ap.add_argument("--min-score", type=float, default=_f("MIN_SCORE", 40.0))
+    ap.add_argument("--min-mentions", type=int, default=_i("MIN_MENTIONS", 15), help="plancher volume pour C1 (anti-bruit)")
+    ap.add_argument("--max-float-m", type=float, default=_f("MAX_FLOAT_M", 150.0), help="plafond free float (M)")
+    ap.add_argument("--max-si-usd", type=float, default=_f("MAX_SI_USD", 1.5e9), help="plafond short interest $ (mega-cap)")
+    ap.add_argument("--max-score-per-cycle", type=int, default=_i("MAX_SCORE_PER_CYCLE", 250),
+                    help="nb max de candidats scorés par cycle (borne le coût Ortex)")
     ap.add_argument("--out", default="scan_latest.json")
     args = ap.parse_args()
 
+    store = None
+    if Store is not None:
+        try:
+            store = Store()  # cache float/SI (Postgres si DATABASE_URL, sinon SQLite)
+        except Exception as e:
+            print(f"(cache indisponible: {e})", file=sys.stderr)
+
     want_c2 = not args.no_c2
-    # univers : watchlist + découverte
-    universe = {}
+    # --- Univers (logique « buzz-gated ») ---
+    # 1) ApeWisdom en profondeur = source de buzz GRATUITE (top ~1000 selon pages).
+    disc = apewisdom_discovery(args.discovery_pages)
+    # 2) Watchlist : on ne RETIENT que les noms qui buzzent (présents dans ApeWisdom
+    #    avec >= min_mentions) -> une watchlist de centaines de noms ne coûte presque rien
+    #    (les noms sans buzz ne déclenchent aucun appel payant).
+    wl = set()
     if os.path.exists(args.watchlist):
         with open(args.watchlist) as f:
-            for ln in f:
-                t = ln.strip().upper()
-                if t and not t.startswith("#"):
-                    universe[t] = {"src": "watchlist"}
-    disc = apewisdom_discovery(args.discovery_pages) if args.discovery else {}
-    for i, (tk, d) in enumerate(sorted(disc.items(), key=lambda x: -(x[1]["mentions"] or 0))):
-        if i >= args.discovery:
+            wl = {ln.strip().upper() for ln in f if ln.strip() and not ln.startswith("#")}
+    universe = {}
+    for t in wl:
+        d = disc.get(t)
+        if d and (d.get("mentions") or 0) >= args.min_mentions:
+            universe[t] = {"src": "watchlist", **d}
+    # 3) Découverte : top N ApeWisdom par mentions (hors watchlist déjà prise)
+    added = 0
+    for tk, d in sorted(disc.items(), key=lambda x: -(x[1].get("mentions") or 0)):
+        if added >= args.discovery:
             break
-        universe.setdefault(tk, {})["src"] = universe.get(tk, {}).get("src", "découverte")
-        universe[tk].update(d)
+        if tk in universe:
+            continue
+        universe[tk] = {"src": "découverte", **d}
+        added += 1
 
-    print(f"Univers : {len(universe)} candidats (watchlist + top {args.discovery} découverte) · "
-          f"C2={'oui' if want_c2 else 'non'}\n")
+    print(f"Univers : {len(universe)} candidats qui buzzent (watchlist active : "
+          f"{sum(1 for v in universe.values() if v['src']=='watchlist')} sur {len(wl)} surveillés · "
+          f"découverte : {added}) · C2={'oui' if want_c2 else 'non'}\n")
+    # plafond par cycle : on score les plus buzzants d'abord (borne le coût Ortex)
+    cand = sorted(universe.items(), key=lambda x: -(x[1].get("mentions") or 0))[:args.max_score_per_cycle]
     hdr = f"{'Ticker':<7}{'Src':<11}{'C1':>5}{'C2':>6}{'C4':>6}{'C5':>4}{'SCCT':>7}  Quadrant"
     print(hdr); print("-" * (len(hdr) + 6))
     results = []
     n_junk = n_bigfloat = 0
-    for tk, d in universe.items():
+    for tk, d in cand:
         # filtre 1 : tickers-poubelle / mots courants / ETF
         if tk in JUNK or tk in ETF_BLOCK:
             n_junk += 1
             continue
         mentions, prev, name = d.get("mentions"), d.get("prev"), d.get("name")
-        if mentions is None:  # watchlist sans data découverte -> interroge Adanos
-            js = adanos_stock(tk)
-            if js:
-                name = name or js.get("company_name")
-                dt_rows = js.get("daily_trend") or []
-                if dt_rows:
-                    # jour le plus récent vs moyenne de la semaine précédente (pas total 7j !)
-                    mentions = dt_rows[0].get("mentions")
-                    base = [r.get("mentions", 0) for r in dt_rows[1:8]]
-                    prev = (sum(base) / len(base)) if base else 0
-                else:
-                    mentions = js.get("mentions")
         c1 = c1_spike(mentions, prev, args.min_mentions)
-        c4, float_m, si, si_usd = c4_live(tk)
+        c4, float_m, si, si_usd = c4_live(tk, store)
         # filtre 2 : float inconnu (throttlé/délisté) -> on ne peut pas évaluer -> exclu
         if float_m is None:
             n_bigfloat += 1

@@ -4,5 +4,7 @@ logs/
 scan_latest.json
 *.csv
 tickers.txt
+universe.txt
+.DS_Store
 __pycache__/
 *.pyc

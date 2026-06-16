@@ -43,14 +43,24 @@ def health():
 
 def spawn_workers():
     env = os.environ.copy()
+    # 0) univers US complet (auto, rafraîchi à chaque démarrage) ; fallback microcaps.txt
+    wl = "microcaps.txt"
+    try:
+        subprocess.run([sys.executable, "build_ticker_universe.py", "--no-etf", "--out", "universe.txt"],
+                       cwd=HERE, env=env, timeout=120, check=True)
+        if os.path.exists(os.path.join(HERE, "universe.txt")):
+            wl = "universe.txt"
+            print("univers US construit -> universe.txt", flush=True)
+    except Exception as e:
+        print(f"build univers échoué ({e}) -> fallback {wl}", flush=True)
     # 1) collecteur continu -> baseline de mentions dans Postgres
     subprocess.Popen([sys.executable, "social_collector.py"], cwd=HERE, env=env)
-    # 2) boucle de scan -> rafraîchit scan_latest.json
+    # 2) boucle de scan -> rafraîchit scan_latest.json (watchlist = univers complet)
     every = os.environ.get("SCAN_EVERY", "1800")
     subprocess.Popen([
         "bash", "-c",
-        f"while true; do {sys.executable} scct_scan.py --watchlist microcaps.txt "
-        f"--discovery 50 --out scan_latest.json; sleep {every}; done"
+        f"while true; do {sys.executable} scct_scan.py --watchlist {wl} "
+        f"--out scan_latest.json; sleep {every}; done"
     ], cwd=HERE, env=env)
     print("workers lancés (collecteur + boucle de scan)", flush=True)
 
