@@ -37,6 +37,7 @@ except ImportError:
 import c2_coordination as C2
 import ortex_c4_pull as C4
 import c5_catalyst as C5
+import adanos_x as X
 from ticker_extractor import STOPLIST
 try:
     from storage import Store
@@ -45,7 +46,41 @@ except Exception:
 
 ADANOS_KEY = os.getenv("ADANOS_API_KEY", "")
 ADANOS_BASE = os.getenv("ADANOS_BASE", "https://api.adanos.org/reddit/stocks")
+TD_KEY = os.getenv("TWELVEDATA_API_KEY", "")
 UA = {"User-Agent": "SCCT-Social scan"}
+
+_tradeable_cache = {}
+
+
+def is_tradeable(tk, max_age_days=10):
+    """Le titre est-il ENCORE coté ? Vérifie un prix récent via TwelveData.
+    Évite les faux positifs sur tickers délistés (ex. PS/Pluralsight) dont Ortex
+    sert encore une fiche float/short périmée. Fail-open si pas de clé / erreur réseau
+    (on ne bloque pas faute de pouvoir vérifier), mais un symbole introuvable -> exclu."""
+    if not TD_KEY:
+        return True
+    if tk in _tradeable_cache:
+        return _tradeable_cache[tk]
+    ok = True
+    try:
+        r = requests.get("https://api.twelvedata.com/time_series",
+                         params={"symbol": tk, "interval": "1day", "outputsize": 5,
+                                 "apikey": TD_KEY}, headers=UA, timeout=20)
+        js = r.json()
+        vals = js.get("values") if isinstance(js, dict) else None
+        if not vals:                       # symbole introuvable / délisté
+            ok = False
+        else:
+            last = str(vals[0].get("datetime", ""))[:10]
+            try:
+                age = (dt.date.today() - dt.date.fromisoformat(last)).days
+                ok = age <= max_age_days   # cotation récente
+            except ValueError:
+                ok = True
+    except Exception:
+        ok = True                          # réseau : ne pas bloquer
+    _tradeable_cache[tk] = ok
+    return ok
 
 W = {"C1": 0.15, "C2": 0.50, "C4": 0.25}  # C3 absent en live, C5 -> quadrant
 Z_SAT = 5.0
@@ -282,7 +317,7 @@ def main():
     hdr = f"{'Ticker':<7}{'Src':<11}{'C1':>5}{'C2':>6}{'C4':>6}{'C5':>4}{'SCCT':>7}  Quadrant"
     print(hdr); print("-" * (len(hdr) + 6))
     results = []
-    n_junk = n_bigfloat = 0
+    n_junk = n_bigfloat = n_delisted = n_nosocial = 0
     for tk, d in cand:
         # filtre 1 : tickers-poubelle / mots courants / ETF
         if tk in JUNK or tk in ETF_BLOCK:
@@ -307,15 +342,37 @@ def main():
         if si_usd is not None and si_usd > args.max_si_usd:
             n_bigfloat += 1
             continue
+        # filtre 5 : titre ENCORE coté ? (anti données mortes Ortex, ex. PS délisté)
+        if not is_tradeable(tk):
+            n_delisted += 1
+            continue
         c2 = c2_live(tk, want_c2)
         c5 = c5_live(tk)
+        # filtre 6 : présence sociale requise (SCCT = squeeze SOCIAL). Sans spike de
+        # mentions (C1) NI coordination (C2), un titre est hors scope quel que soit
+        # son float/catalyseur -> on ne le retient pas comme candidat.
+        if not c1 and not (c2 and c2 > 0):
+            n_nosocial += 1
+            continue
         sc = score(c1, c2, c4)
         q = quadrant(c1, c5)
+        # --- signal X/Twitter (cross-validation) ---
+        x_buzz = x_sent = None
+        cross = False
+        if os.getenv("X_ENABLED", "1") in ("1", "true", "yes"):
+            xs = X.x_stock(tk)
+            if xs:
+                x_buzz = xs.get("buzz_score")
+                x_sent = xs.get("sentiment_score")
+                # cross-plateforme : buzz Reddit (mentions) ET buzz X significatif
+                cross = bool((mentions or 0) >= args.min_mentions and (x_buzz or 0) >= 40)
         results.append({"ticker": tk, "name": name, "src": d.get("src", "?"), "mentions": mentions,
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
-                        "short_int": si, "SCCT": sc, "quadrant": q})
+                        "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
+                        "SCCT": sc, "quadrant": q})
         time.sleep(0.2)
-    print(f"(filtrés : {n_junk} poubelle/ETF, {n_bigfloat} float > {args.max_float_m}M)\n")
+    print(f"(filtrés : {n_junk} poubelle/ETF, {n_bigfloat} float > {args.max_float_m}M, "
+          f"{n_delisted} délistés/non cotés, {n_nosocial} sans signal social)\n")
 
     results.sort(key=lambda r: r["SCCT"], reverse=True)
     for r in results:
