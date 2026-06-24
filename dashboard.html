@@ -102,12 +102,25 @@
       <th>Catalys.<i class="i" data-tip="C5 — catalyseur daté (0/1) : 8-K ou earnings près de l'événement. Sert à placer le quadrant.">i</i></th>
       <th>Float (M)<i class="i" data-tip="Free float en millions d'actions. Plus c'est petit, plus c'est squeezable.">i</i></th>
       <th>Short %<i class="i" data-tip="Short interest en % du float. Élevé = beaucoup de vendeurs à découvert à racheter.">i</i></th>
+      <th>X buzz<i class="i" data-tip="Buzz X/Twitter (0–100, Adanos). 🔗 = confirmé sur X ET Reddit (cross-plateforme = confiance accrue).">i</i></th>
       <th>Score<i class="i" data-tip="Score global 0–100. Au-delà de ~60 et en Q2 = à regarder sérieusement.">i</i></th>
       <th>Type<i class="i" data-tip="Q2 convergence (idéal) · Q1 pump pur (risqué) · Q3 bruit · Q4 fondamental (hors scope).">i</i></th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
   <div id="emptymsg"></div>
+
+  <div id="watchSec" style="margin-top:24px;display:none">
+    <p class="sec-title">👀 Sociétés en veille<i class="i" data-tip="Titres encore cotés et réellement discutés (mentions ≥ seuil) mais qui ne sont PAS un signal : score sous le seuil, ou pas (encore) de coordination sociale confirmée. À garder à l'œil — ce n'est pas une reco.">i</i></p>
+    <table>
+      <thead><tr>
+        <th>Titre</th><th>D'où</th><th>Mentions</th><th>Volume</th><th>Coordin.</th>
+        <th>Carburant</th><th>Float (M)</th><th>Short %</th><th>Score</th><th>Type</th>
+      </tr></thead>
+      <tbody id="watchRows"></tbody>
+    </table>
+    <p class="small">Veille = activité sociale présente mais sous le seuil de signal, ou structure (float/catalyseur) sans coordination confirmée. Une accélération des mentions + coordination ferait basculer un titre vers les signaux.</p>
+  </div>
 
   <div class="grid">
     <div class="cell cQ2"><h4>🟢 Q2 — Convergence (idéal)</h4><div id="q2"></div></div>
@@ -181,6 +194,7 @@ async function load(){
     tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td><td class="src">${r.src||''}</td>
       <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td><td>${fmt(r.C5)}</td>
       <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
+      <td>${r.x_buzz!=null?Math.round(r.x_buzz):'–'}${r.cross?' 🔗':''}</td>
       <td class="scorewrap"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
       <td><span class="q ${qClass(r.quadrant)}">${q}</span></td>`;
     rows.appendChild(tr);
@@ -188,6 +202,25 @@ async function load(){
   });
   document.getElementById('emptymsg').innerHTML = sig.length? "" :
     '<div style="padding:24px;text-align:center;color:var(--muted)">Aucun candidat au-dessus du seuil. Période calme — comportement normal.</div>';
+
+  // --- Sociétés en veille (discutées mais pas un signal) ---
+  const watch=data.watch||[];
+  const wsec=document.getElementById('watchSec'), wrows=document.getElementById('watchRows');
+  wrows.innerHTML="";
+  if(watch.length){
+    wsec.style.display="";
+    watch.forEach(r=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td>
+        <td class="src">${r.src||''}</td><td>${r.mentions!=null?r.mentions:'–'}</td>
+        <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td>
+        <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
+        <td class="scorewrap"><span class="score">${r.SCCT}</span></td>
+        <td><span class="q ${qClass(r.quadrant)}">${qShort(r.quadrant)}</span></td>`;
+      wrows.appendChild(tr);
+    });
+  } else { wsec.style.display="none"; }
+
   for(const k of ['q1','q2','q3','q4'])
     document.getElementById(k).innerHTML = buckets[k].length? buckets[k].map(t=>`<span class="chip">${t}</span>`).join('') : '<span class="src">—</span>';
 }

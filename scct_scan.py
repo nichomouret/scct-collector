@@ -317,7 +317,7 @@ def main():
     hdr = f"{'Ticker':<7}{'Src':<11}{'C1':>5}{'C2':>6}{'C4':>6}{'C5':>4}{'SCCT':>7}  Quadrant"
     print(hdr); print("-" * (len(hdr) + 6))
     results = []
-    n_junk = n_bigfloat = n_delisted = n_nosocial = 0
+    n_junk = n_bigfloat = n_delisted = 0
     for tk, d in cand:
         # filtre 1 : tickers-poubelle / mots courants / ETF
         if tk in JUNK or tk in ETF_BLOCK:
@@ -348,14 +348,12 @@ def main():
             continue
         c2 = c2_live(tk, want_c2)
         c5 = c5_live(tk)
-        # filtre 6 : présence sociale requise (SCCT = squeeze SOCIAL). Sans spike de
-        # mentions (C1) NI coordination (C2), un titre est hors scope quel que soit
-        # son float/catalyseur -> on ne le retient pas comme candidat.
-        if not c1 and not (c2 and c2 > 0):
-            n_nosocial += 1
-            continue
         sc = score(c1, c2, c4)
         q = quadrant(c1, c5)
+        # présence sociale = spike de mentions (C1) OU coordination (C2). SCCT détecte
+        # des squeezes SOCIAUX : sans présence sociale, un titre n'est PAS un signal
+        # (quel que soit son float/catalyseur) — il peut au mieux aller en « veille ».
+        has_social = bool(c1) or bool(c2 and c2 > 0)
         # --- signal X/Twitter (cross-validation) ---
         x_buzz = x_sent = None
         cross = False
@@ -369,28 +367,35 @@ def main():
         results.append({"ticker": tk, "name": name, "src": d.get("src", "?"), "mentions": mentions,
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
                         "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
-                        "SCCT": sc, "quadrant": q})
+                        "SCCT": sc, "quadrant": q, "has_social": has_social})
         time.sleep(0.2)
     print(f"(filtrés : {n_junk} poubelle/ETF, {n_bigfloat} float > {args.max_float_m}M, "
-          f"{n_delisted} délistés/non cotés, {n_nosocial} sans signal social)\n")
+          f"{n_delisted} délistés/non cotés)\n")
 
     results.sort(key=lambda r: r["SCCT"], reverse=True)
-    for r in results:
-        if r["SCCT"] < args.min_score:
-            continue
-        def f(x): return "-" if x is None else (f"{x:.2f}" if isinstance(x, float) else str(x))
+    # SIGNAUX = présence sociale (C1 ou C2) ET score >= seuil
+    sigs = [r for r in results if r["SCCT"] >= args.min_score and r["has_social"]]
+    # VEILLE = titres réellement discutés (mentions >= seuil) mais pas (encore) un
+    # signal : soit score sous le seuil, soit pas (encore) de présence sociale.
+    sig_ids = {id(r) for r in sigs}
+    watch = [r for r in results
+             if id(r) not in sig_ids and (r.get("mentions") or 0) >= args.min_mentions]
+    watch.sort(key=lambda r: (r["SCCT"], r.get("mentions") or 0), reverse=True)
+    watch = watch[:25]
+
+    def f(x): return "-" if x is None else (f"{x:.2f}" if isinstance(x, float) else str(x))
+    for r in sigs:
         print(f"{r['ticker']:<7}{r['src']:<11}{f(r['C1']):>5}{f(r['C2']):>6}{f(r['C4']):>6}"
               f"{f(r['C5']):>4}{r['SCCT']:>7}  {r['quadrant']}")
 
-    sigs = [r for r in results if r["SCCT"] >= args.min_score]
     snapshot = {"generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "min_score": args.min_score, "n_universe": len(universe),
                 "analysis": claude_analysis(sigs, len(universe)),
-                "signals": sigs, "all": results}
+                "signals": sigs, "watch": watch, "all": results}
     with open(args.out, "w") as f:
         json.dump(snapshot, f, indent=2)
     n_sig = len(snapshot["signals"])
-    print(f"\n{n_sig} signaux ≥ {args.min_score} -> {args.out}")
+    print(f"\n{n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille -> {args.out}")
     print("Détection only. Vérifie chaque candidat manuellement avant tout trade.")
 
 
