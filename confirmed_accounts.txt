@@ -1,0 +1,10 @@
+# Comptes X à EDGE CONFIRMÉ — track-record qui bat le hasard avec confiance
+# statistique (Wilson − baseline > 0, échantillon suffisant, note >= 4★).
+# Issu de x_influencers.csv. Mettre à jour après chaque gros run.
+#
+# Un compte ici = élément de CONFIRMATION dans SCCT (pas un signal autonome) :
+# un consensus / buzz X impliquant un de ces comptes est bien plus crédible.
+# Format : un handle X par ligne (sans @). Lignes vides / # ignorées.
+#
+# Dernière revue : 2026-06-24 (run juil25–fév26, 131 comptes notés)
+CK_Cryptoklepto

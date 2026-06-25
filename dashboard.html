@@ -102,7 +102,7 @@
       <th>Catalys.<i class="i" data-tip="C5 — catalyseur daté (0/1) : 8-K ou earnings près de l'événement. Sert à placer le quadrant.">i</i></th>
       <th>Float (M)<i class="i" data-tip="Free float en millions d'actions. Plus c'est petit, plus c'est squeezable.">i</i></th>
       <th>Short %<i class="i" data-tip="Short interest en % du float. Élevé = beaucoup de vendeurs à découvert à racheter.">i</i></th>
-      <th>X buzz<i class="i" data-tip="Buzz X/Twitter (0–100, Adanos). 🔗 = confirmé sur X ET Reddit (cross-plateforme = confiance accrue).">i</i></th>
+      <th>X buzz<i class="i" data-tip="Buzz X/Twitter (0–100, Adanos). 🔗 = confirmé sur X ET Reddit. ✅ = un compte X à edge prouvé (track-record qui bat le hasard) est actif sur le titre — élément de confirmation fort.">i</i></th>
       <th>Score<i class="i" data-tip="Score global 0–100. Au-delà de ~60 et en Q2 = à regarder sérieusement.">i</i></th>
       <th>Type<i class="i" data-tip="Q2 convergence (idéal) · Q1 pump pur (risqué) · Q3 bruit · Q4 fondamental (hors scope).">i</i></th>
     </tr></thead>
@@ -137,6 +137,8 @@
 const fmt = v => (v===null||v===undefined||v==="") ? "–" : (typeof v==="number" ? v.toFixed(2) : v);
 function qClass(q){ return q&&q.includes("Q1")?"qQ1":q&&q.includes("Q2")?"qQ2":q&&q.includes("Q4")?"qQ4":"qQ3"; }
 function qShort(q){ return (q||"").split(" ")[0]; }
+function confBadge(r){ return (r.x_confirmed&&r.x_confirmed.length)
+  ? ` <span title="Compte X à edge confirmé actif : @${r.x_confirmed.join(', @')}" style="cursor:help">✅</span>` : ""; }
 
 function setVerdict(signals){
   const el=document.getElementById('verdict'), dot=document.getElementById('vdot'),
@@ -144,11 +146,18 @@ function setVerdict(signals){
   const actionable=signals.filter(r=>r.quadrant&&(r.quadrant.includes('Q1')||r.quadrant.includes('Q2')));
   const q2strong=actionable.filter(r=>r.quadrant.includes('Q2')&&r.SCCT>=60).sort((a,b)=>b.SCCT-a.SCCT);
   const warm=actionable.filter(r=>r.SCCT>=55).sort((a,b)=>b.SCCT-a.SCCT);
+  const confirmed=signals.filter(r=>r.x_confirmed&&r.x_confirmed.length).sort((a,b)=>b.SCCT-a.SCCT);
   el.className="verdict v-green";
   if(q2strong.length){
     el.className="verdict v-red"; dot.textContent="🔴";
+    const c=q2strong.find(r=>r.x_confirmed&&r.x_confirmed.length);
     t.textContent="SIGNAL — "+q2strong[0].ticker+" (score "+q2strong[0].SCCT+", convergence Q2)";
-    s.textContent="Convergence social + carburant. À examiner sérieusement (vérif manuelle obligatoire).";
+    s.textContent=(c?"✅ Compte X confirmé actif (@"+c.x_confirmed.join(', @')+"). ":"")
+      +"Convergence social + carburant. À examiner sérieusement (vérif manuelle obligatoire).";
+  } else if(confirmed.length){
+    el.className="verdict v-orange"; dot.textContent="🟠";
+    t.textContent="À surveiller — "+confirmed[0].ticker+" (✅ compte X confirmé actif)";
+    s.textContent="Un compte X à edge prouvé (@"+confirmed[0].x_confirmed.join(', @')+") est actif sur ce titre. Élément de confirmation — vérifie le contexte avant tout trade.";
   } else if(warm.length){
     el.className="verdict v-orange"; dot.textContent="🟠";
     t.textContent="À surveiller — "+warm[0].ticker+" (score "+warm[0].SCCT+", "+qShort(warm[0].quadrant)+")";
@@ -194,7 +203,7 @@ async function load(){
     tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td><td class="src">${r.src||''}</td>
       <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td><td>${fmt(r.C5)}</td>
       <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
-      <td>${r.x_buzz!=null?Math.round(r.x_buzz):'–'}${r.cross?' 🔗':''}</td>
+      <td>${r.x_buzz!=null?Math.round(r.x_buzz):'–'}${r.cross?' 🔗':''}${confBadge(r)}</td>
       <td class="scorewrap"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
       <td><span class="q ${qClass(r.quadrant)}">${q}</span></td>`;
     rows.appendChild(tr);
@@ -211,7 +220,7 @@ async function load(){
     wsec.style.display="";
     watch.forEach(r=>{
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td>
+      tr.innerHTML=`<td class="tk">${r.ticker}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
         <td class="src">${r.src||''}</td><td>${r.mentions!=null?r.mentions:'–'}</td>
         <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td>
         <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>

@@ -284,6 +284,9 @@ def main():
             print(f"(cache indisponible: {e})", file=sys.stderr)
 
     want_c2 = not args.no_c2
+    CONFIRMED = X.load_confirmed(os.getenv("CONFIRMED_FILE", "confirmed_accounts.txt"))
+    if CONFIRMED:
+        print(f"Comptes X confirmés chargés : {len(CONFIRMED)}\n", file=sys.stderr)
     # --- Univers (logique « buzz-gated ») ---
     # 1) ApeWisdom en profondeur = source de buzz GRATUITE (top ~1000 selon pages).
     disc = apewisdom_discovery(args.discovery_pages)
@@ -354,9 +357,10 @@ def main():
         # des squeezes SOCIAUX : sans présence sociale, un titre n'est PAS un signal
         # (quel que soit son float/catalyseur) — il peut au mieux aller en « veille ».
         has_social = bool(c1) or bool(c2 and c2 > 0)
-        # --- signal X/Twitter (cross-validation) ---
+        # --- signal X/Twitter (cross-validation + comptes confirmés) ---
         x_buzz = x_sent = None
         cross = False
+        x_confirmed = []
         if os.getenv("X_ENABLED", "1") in ("1", "true", "yes"):
             xs = X.x_stock(tk)
             if xs:
@@ -364,9 +368,12 @@ def main():
                 x_sent = xs.get("sentiment_score")
                 # cross-plateforme : buzz Reddit (mentions) ET buzz X significatif
                 cross = bool((mentions or 0) >= args.min_mentions and (x_buzz or 0) >= 40)
+                # comptes à edge confirmé actifs sur le titre = élément de confirmation
+                x_confirmed = X.confirmed_in_stock(xs, CONFIRMED)
         results.append({"ticker": tk, "name": name, "src": d.get("src", "?"), "mentions": mentions,
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
                         "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
+                        "x_confirmed": x_confirmed,
                         "SCCT": sc, "quadrant": q, "has_social": has_social})
         time.sleep(0.2)
     print(f"(filtrés : {n_junk} poubelle/ETF, {n_bigfloat} float > {args.max_float_m}M, "
