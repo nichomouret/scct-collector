@@ -70,6 +70,10 @@
   .cQ2 h4{color:var(--q2)} .cQ1 h4{color:var(--q1)} .cQ4 h4{color:var(--q4)} .cQ3 h4{color:var(--muted)}
   .small{color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5}
   .disc{color:var(--muted);font-size:11px;border-left:3px solid var(--hot);padding-left:10px;margin:16px 0 0}
+  .legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 2px 0;padding:12px 14px;
+     background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .legend .lg{font-size:12px;color:var(--muted);line-height:1.5;flex:1 1 240px}
+  .legend .lg b{color:var(--txt);font-weight:700}
 </style>
 </head>
 <body>
@@ -109,6 +113,13 @@
     <tbody id="rows"></tbody>
   </table>
   <div id="emptymsg"></div>
+
+  <div class="legend">
+    <span class="lg"><b>⚡ Ignition précoce</b> — le buzz s'accélère <i>avant</i> que le prix ait bougé : entrée potentiellement en amont, plus tôt mais plus risquée.</span>
+    <span class="lg"><b style="color:var(--q1)">⚠ Déjà parti</b> — le titre a déjà couru (&gt;20 % sur 5 j) : risque de chasing, ce n'est pas une entrée fraîche.</span>
+    <span class="lg"><b style="color:var(--q2)">✅ Compte confirmé</b> — un compte X au track-record prouvé (bat le hasard) est actif sur le titre : élément de confirmation.</span>
+    <span class="lg"><b>🔗 Cross-plateforme</b> — buzz simultané sur Reddit ET X/Twitter : confiance accrue.</span>
+  </div>
 
   <div id="watchSec" style="margin-top:24px;display:none">
     <p class="sec-title">👀 Sociétés en veille<i class="i" data-tip="Titres encore cotés et réellement discutés (mentions ≥ seuil) mais qui ne sont PAS un signal : score sous le seuil, ou pas (encore) de coordination sociale confirmée. À garder à l'œil — ce n'est pas une reco.">i</i></p>
