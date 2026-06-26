@@ -139,10 +139,17 @@ function qClass(q){ return q&&q.includes("Q1")?"qQ1":q&&q.includes("Q2")?"qQ2":q
 function qShort(q){ return (q||"").split(" ")[0]; }
 function confBadge(r){ return (r.x_confirmed&&r.x_confirmed.length)
   ? ` <span title="Compte X à edge confirmé actif : @${r.x_confirmed.join(', @')}" style="cursor:help">✅</span>` : ""; }
+function ignBadge(r){
+  if(r.already_moved) return ` <span title="Mouvement déjà entamé (+${Math.round((r.chg_5d||0)*100)}% sur 5j) — risque de chasing, pas une entrée fraîche" style="cursor:help;color:var(--q1)">⚠</span>`;
+  if(r.ignition!=null&&r.ignition>=0.5) return ` <span title="Ignition précoce : buzz en accélération avant un gros move (en amont). Plus tôt, mais plus risqué." style="cursor:help">⚡</span>`;
+  return "";
+}
 
-function setVerdict(signals){
+function setVerdict(signals, watch){
   const el=document.getElementById('verdict'), dot=document.getElementById('vdot'),
         t=document.getElementById('vtitle'), s=document.getElementById('vsub');
+  const igni=(watch||[]).concat(signals).filter(r=>r.ignition!=null&&r.ignition>=0.5&&!r.already_moved)
+        .sort((a,b)=>b.ignition-a.ignition);
   const actionable=signals.filter(r=>r.quadrant&&(r.quadrant.includes('Q1')||r.quadrant.includes('Q2')));
   const q2strong=actionable.filter(r=>r.quadrant.includes('Q2')&&r.SCCT>=60).sort((a,b)=>b.SCCT-a.SCCT);
   const warm=actionable.filter(r=>r.SCCT>=55).sort((a,b)=>b.SCCT-a.SCCT);
@@ -162,6 +169,10 @@ function setVerdict(signals){
     el.className="verdict v-orange"; dot.textContent="🟠";
     t.textContent="À surveiller — "+warm[0].ticker+" (score "+warm[0].SCCT+", "+qShort(warm[0].quadrant)+")";
     s.textContent="Signal partiel, pas de convergence idéale. Garder à l'œil, ne pas se précipiter.";
+  } else if(igni.length){
+    el.className="verdict v-orange"; dot.textContent="🟠";
+    t.textContent="⚡ Ignition précoce — "+igni[0].ticker;
+    s.textContent="Le buzz s'accélère avant un gros mouvement de prix (signal en amont). Plus tôt, donc plus risqué — surveille de près, vérif manuelle.";
   } else {
     dot.textContent="🟢";
     t.textContent="Rien à signaler";
@@ -191,7 +202,7 @@ async function load(){
   const sig=data.signals||[];
   document.getElementById('meta').textContent =
     `${sig.length} candidats · scan du ${data.generated_utc?new Date(data.generated_utc).toLocaleString('fr-FR'):'—'}`;
-  setVerdict(sig);
+  setVerdict(sig, data.watch||[]);
   renderAnalysis(data.analysis);
 
   const rows=document.getElementById('rows'); rows.innerHTML="";
@@ -200,7 +211,7 @@ async function load(){
     const q=qShort(r.quadrant);
     const cls = q==="Q2"?"hot":q==="Q1"?"warm":"";
     const tr=document.createElement('tr'); if(cls) tr.className=cls;
-    tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td><td class="src">${r.src||''}</td>
+    tr.innerHTML=`<td class="tk">${r.ticker}${ignBadge(r)}<div class="tkname">${r.name||''}</div></td><td class="src">${r.src||''}</td>
       <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td><td>${fmt(r.C5)}</td>
       <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
       <td>${r.x_buzz!=null?Math.round(r.x_buzz):'–'}${r.cross?' 🔗':''}${confBadge(r)}</td>
@@ -220,7 +231,7 @@ async function load(){
     wsec.style.display="";
     watch.forEach(r=>{
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td class="tk">${r.ticker}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
+      tr.innerHTML=`<td class="tk">${r.ticker}${ignBadge(r)}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
         <td class="src">${r.src||''}</td><td>${r.mentions!=null?r.mentions:'–'}</td>
         <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td>
         <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>

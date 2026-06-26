@@ -45,6 +45,10 @@ UA = {"User-Agent": "SCCT-Social C4"}
 FLOAT_FLOOR = float(os.getenv("FLOAT_FLOOR_M", "5")) * 1e6
 FLOAT_CAP = float(os.getenv("FLOAT_CAP_M", "300")) * 1e6
 SI_CAP = float(os.getenv("SI_CAP", "0.40"))
+# Plancher de short interest : sous ce seuil, pas de carburant de squeeze -> C4 écrasé.
+# (un flottant serré sans shorts à racheter ne peut PAS squeezer ; corrige les
+#  faux positifs type LOT/Lotus, SI ~0,5%.)
+SI_FLOOR = float(os.getenv("SI_FLOOR", "0.08"))
 BF_CAP = float(os.getenv("BF_CAP", "1.00"))
 W_FLOAT = float(os.getenv("W_FLOAT", "0.40"))
 W_SI = float(os.getenv("W_SI", "0.40"))
@@ -160,6 +164,11 @@ def compute_c4(float_shares, si, bf):
     if bf is not None:
         sb = clamp(bf / BF_CAP); parts.append(sb * W_BORROW); weights.append(W_BORROW)
     c4 = sum(parts) / sum(weights) if weights else None
+    # GATE short interest : le SI est un PRÉREQUIS, pas juste un composant additif.
+    # SI connu et < plancher -> C4 réduit proportionnellement (≈0 si SI négligeable).
+    # SI inconnu (Ortex absent/throttlé) -> pas de pénalité (on ne peut pas conclure).
+    if c4 is not None and si is not None:
+        c4 *= clamp(si / SI_FLOOR)
     return sf, ss, sb, (round(c4, 3) if c4 is not None else None)
 
 

@@ -48,39 +48,70 @@ ADANOS_KEY = os.getenv("ADANOS_API_KEY", "")
 ADANOS_BASE = os.getenv("ADANOS_BASE", "https://api.adanos.org/reddit/stocks")
 TD_KEY = os.getenv("TWELVEDATA_API_KEY", "")
 UA = {"User-Agent": "SCCT-Social scan"}
+IGN_MOVE_CAP = float(os.getenv("IGN_MOVE_CAP", "0.15"))   # au-delà, l'ignition s'amortit
+CHASE_MOVE = float(os.getenv("CHASE_MOVE", "0.20"))       # hausse 5j -> flag « déjà parti »
 
-_tradeable_cache = {}
+_price_cache = {}
 
 
-def is_tradeable(tk, max_age_days=10):
-    """Le titre est-il ENCORE coté ? Vérifie un prix récent via TwelveData.
-    Évite les faux positifs sur tickers délistés (ex. PS/Pluralsight) dont Ortex
-    sert encore une fiche float/short périmée. Fail-open si pas de clé / erreur réseau
-    (on ne bloque pas faute de pouvoir vérifier), mais un symbole introuvable -> exclu."""
+def price_snapshot(tk, max_age_days=10):
+    """1 appel TwelveData (mis en cache) -> dict :
+       tradeable (coté récemment ?), last (dernier close), chg_3d / chg_5d (variation %).
+    Sert au filtre cotation ET à la détection précoce (le move est-il déjà parti ?).
+    Fail-open : pas de clé / erreur réseau -> tradeable=True (on ne bloque pas)."""
+    if tk in _price_cache:
+        return _price_cache[tk]
+    snap = {"tradeable": True, "last": None, "chg_3d": None, "chg_5d": None}
     if not TD_KEY:
-        return True
-    if tk in _tradeable_cache:
-        return _tradeable_cache[tk]
-    ok = True
+        _price_cache[tk] = snap
+        return snap
     try:
         r = requests.get("https://api.twelvedata.com/time_series",
-                         params={"symbol": tk, "interval": "1day", "outputsize": 5,
+                         params={"symbol": tk, "interval": "1day", "outputsize": 8,
                                  "apikey": TD_KEY}, headers=UA, timeout=20)
         js = r.json()
         vals = js.get("values") if isinstance(js, dict) else None
         if not vals:                       # symbole introuvable / délisté
-            ok = False
+            snap["tradeable"] = False
         else:
+            # TwelveData : ordre décroissant par défaut (vals[0] = plus récent)
+            closes = [float(v["close"]) for v in vals if v.get("close")]
             last = str(vals[0].get("datetime", ""))[:10]
             try:
-                age = (dt.date.today() - dt.date.fromisoformat(last)).days
-                ok = age <= max_age_days   # cotation récente
+                snap["tradeable"] = (dt.date.today() - dt.date.fromisoformat(last)).days <= max_age_days
             except ValueError:
-                ok = True
+                pass
+            if closes:
+                snap["last"] = closes[0]
+                if len(closes) > 3 and closes[3] > 0:
+                    snap["chg_3d"] = (closes[0] - closes[3]) / closes[3]
+                if len(closes) > 5 and closes[5] > 0:
+                    snap["chg_5d"] = (closes[0] - closes[5]) / closes[5]
     except Exception:
-        ok = True                          # réseau : ne pas bloquer
-    _tradeable_cache[tk] = ok
-    return ok
+        pass                               # réseau : ne pas bloquer
+    _price_cache[tk] = snap
+    return snap
+
+
+def is_tradeable(tk, max_age_days=10):
+    return price_snapshot(tk, max_age_days)["tradeable"]
+
+
+def ignition_score(mention_ratio, trend_history, chg_5d, move_cap=0.15):
+    """Signal d'IGNITION PRÉCOCE : buzz en accélération AVANT que le prix ait
+    beaucoup bougé. Élevé = coordination naissante (en amont), pas un move déjà
+    consommé. Combine l'accélération du buzz X (dérivée de trend_history) et celle
+    des mentions Reddit, amortie si le titre a déjà couru (anti-chasing)."""
+    accel = 0.0
+    th = [float(x) for x in (trend_history or []) if isinstance(x, (int, float))]
+    if len(th) >= 4:
+        prior = sum(th[-4:-1]) / 3
+        accel = clamp((th[-1] - prior) / max(prior, 1.0))
+    mr = clamp((mention_ratio - 1) / 2.0) if mention_ratio else 0.0
+    raw = 0.5 * accel + 0.5 * mr
+    if chg_5d is not None and chg_5d > move_cap:   # move déjà entamé -> on amortit
+        raw *= clamp(1 - (chg_5d - move_cap) / move_cap)   # > 2x le cap -> ~0
+    return round(clamp(raw), 3)
 
 W = {"C1": 0.15, "C2": 0.50, "C4": 0.25}  # C3 absent en live, C5 -> quadrant
 Z_SAT = 5.0
@@ -361,6 +392,7 @@ def main():
         x_buzz = x_sent = None
         cross = False
         x_confirmed = []
+        xs = None
         if os.getenv("X_ENABLED", "1") in ("1", "true", "yes"):
             xs = X.x_stock(tk)
             if xs:
@@ -370,10 +402,19 @@ def main():
                 cross = bool((mentions or 0) >= args.min_mentions and (x_buzz or 0) >= 40)
                 # comptes à edge confirmé actifs sur le titre = élément de confirmation
                 x_confirmed = X.confirmed_in_stock(xs, CONFIRMED)
+        # --- détection précoce : ignition (buzz qui accélère AVANT le gros move) ---
+        snap = price_snapshot(tk)          # déjà appelé par le filtre cotation (cache)
+        chg_5d = snap.get("chg_5d")
+        mention_ratio = (mentions or 0) / max(prev or 0, 1)
+        ignition = ignition_score(mention_ratio, xs.get("trend_history") if xs else None,
+                                  chg_5d, IGN_MOVE_CAP)
+        already_moved = chg_5d is not None and chg_5d >= CHASE_MOVE
         results.append({"ticker": tk, "name": name, "src": d.get("src", "?"), "mentions": mentions,
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
                         "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
-                        "x_confirmed": x_confirmed,
+                        "x_confirmed": x_confirmed, "ignition": ignition,
+                        "chg_5d": round(chg_5d, 3) if chg_5d is not None else None,
+                        "already_moved": already_moved,
                         "SCCT": sc, "quadrant": q, "has_social": has_social})
         time.sleep(0.2)
     print(f"(filtrés : {n_junk} poubelle/ETF, {n_bigfloat} float > {args.max_float_m}M, "
@@ -387,7 +428,8 @@ def main():
     sig_ids = {id(r) for r in sigs}
     watch = [r for r in results
              if id(r) not in sig_ids and (r.get("mentions") or 0) >= args.min_mentions]
-    watch.sort(key=lambda r: (r["SCCT"], r.get("mentions") or 0), reverse=True)
+    # priorité à l'IGNITION (buzz qui accélère tôt) puis au score
+    watch.sort(key=lambda r: (r.get("ignition") or 0, r["SCCT"]), reverse=True)
     watch = watch[:25]
 
     def f(x): return "-" if x is None else (f"{x:.2f}" if isinstance(x, float) else str(x))
