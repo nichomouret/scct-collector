@@ -52,6 +52,21 @@ IGN_MOVE_CAP = float(os.getenv("IGN_MOVE_CAP", "0.15"))   # au-delà, l'ignition
 CHASE_MOVE = float(os.getenv("CHASE_MOVE", "0.20"))       # hausse 5j -> flag « déjà parti »
 TRACK_MOVE_ACTIVE = float(os.getenv("TRACK_MOVE_ACTIVE", "0.05"))  # |var 3j| >= => « bouge encore »
 TRACK_GRACE_DAYS = float(os.getenv("TRACK_GRACE_DAYS", "3"))       # délai de calme avant retrait du suivi
+STRUCT_C4 = float(os.getenv("STRUCT_C4", "0.50"))                  # C4 >= => « fusil chargé » (amorce structurelle)
+
+
+def load_list(path):
+    """Lit une liste de tickers (un par ligne, # = commentaire)."""
+    out = set()
+    try:
+        with open(path) as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln and not ln.startswith("#"):
+                    out.add(ln.split()[0].upper())
+    except FileNotFoundError:
+        pass
+    return out
 
 _price_cache = {}
 
@@ -320,6 +335,9 @@ def main():
     CONFIRMED = X.load_confirmed(os.getenv("CONFIRMED_FILE", "confirmed_accounts.txt"))
     if CONFIRMED:
         print(f"Comptes X confirmés chargés : {len(CONFIRMED)}\n", file=sys.stderr)
+    SQUEEZE_WATCH = load_list(os.getenv("SQUEEZE_WATCH_FILE", "squeeze_watch.txt"))
+    if SQUEEZE_WATCH:
+        print(f"Watchlist emprunt (squeeze structurel) : {len(SQUEEZE_WATCH)}\n", file=sys.stderr)
     # --- Univers (logique « buzz-gated ») ---
     # 1) ApeWisdom en profondeur = source de buzz GRATUITE (top ~1000 selon pages).
     disc = apewisdom_discovery(args.discovery_pages)
@@ -356,15 +374,19 @@ def main():
     for tk, t in tracked_prev.items():
         if tk not in universe:
             universe[tk] = {"src": "suivi", "mentions": None, "prev": None, "name": t.get("name")}
+    # 5) WATCHLIST EMPRUNT : titres à surveiller côté short interest, scorés même sans buzz
+    for tk in SQUEEZE_WATCH:
+        if tk not in universe:
+            universe[tk] = {"src": "structurel", "mentions": None, "prev": None, "name": None}
 
     print(f"Univers : {len(universe)} candidats qui buzzent (watchlist active : "
           f"{sum(1 for v in universe.values() if v['src']=='watchlist')} sur {len(wl)} surveillés · "
           f"découverte : {added} · suivi : {len(tracked_prev)}) · C2={'oui' if want_c2 else 'non'}\n")
     # plafond par cycle : on score les plus buzzants d'abord (borne le coût Ortex)
     cand = sorted(universe.items(), key=lambda x: -(x[1].get("mentions") or 0))[:args.max_score_per_cycle]
-    # garantit que les titres en suivi sont toujours scorés (même hors du top buzz)
+    # garantit que les titres en suivi ET en watchlist emprunt sont toujours scorés
     cand_tks = {t for t, _ in cand}
-    for tk in tracked_prev:
+    for tk in set(tracked_prev) | SQUEEZE_WATCH:
         if tk not in cand_tks and tk in universe:
             cand.append((tk, universe[tk]))
     hdr = f"{'Ticker':<7}{'Src':<11}{'C1':>5}{'C2':>6}{'C4':>6}{'C5':>4}{'SCCT':>7}  Quadrant"
@@ -382,15 +404,16 @@ def main():
             n_junk += 1
             continue
         is_tracked = tk in tracked_prev
+        is_struct = tk in SQUEEZE_WATCH
+        protected = is_tracked or is_struct   # suivi/watchlist emprunt : on ne les éjecte pas
         c1 = c1_spike(mentions, prev, args.min_mentions)
         c4, float_m, si, si_usd = c4_live(tk, store)
-        # filtre 2 : float inconnu (throttlé/délisté) -> exclu, SAUF si déjà en suivi
-        # (on ne veut pas qu'un titre suivi disparaisse sur un throttle Ortex transitoire)
-        if float_m is None and not is_tracked:
+        # filtre 2 : float inconnu (throttlé/délisté) -> exclu, SAUF si suivi/watchlist emprunt
+        if float_m is None and not protected:
             n_bigfloat += 1
             continue
-        # filtre 3 : univers micro/small-cap (float > plafond -> exclu ; tolérant si suivi)
-        if float_m is not None and float_m > args.max_float_m and not is_tracked:
+        # filtre 3 : univers micro/small-cap (float > plafond -> exclu ; tolérant si protégé)
+        if float_m is not None and float_m > args.max_float_m and not protected:
             n_bigfloat += 1
             continue
         # filtre 4 : grosse cap déguisée (short interest en $ énorme = mega-cap, ex. AMZN)
@@ -516,6 +539,15 @@ def main():
                 rec[k] = cur.get(k)
         tracked_out.sort(key=lambda x: (x.get("status") == "actif", x.get("peak_score") or 0), reverse=True)
 
+    # --- AMORCE STRUCTURELLE : watchlist emprunt (carburant C4 sans étincelle sociale) ---
+    structural = []
+    for r in results:
+        if r["ticker"] in SQUEEZE_WATCH:
+            rec = dict(r)
+            rec["loaded"] = (r.get("C4") or 0) >= STRUCT_C4   # 🔫 fusil chargé
+            structural.append(rec)
+    structural.sort(key=lambda r: (r.get("C4") or 0), reverse=True)
+
     def f(x): return "-" if x is None else (f"{x:.2f}" if isinstance(x, float) else str(x))
     for r in sigs:
         print(f"{r['ticker']:<7}{r['src']:<11}{f(r['C1']):>5}{f(r['C2']):>6}{f(r['C4']):>6}"
@@ -524,11 +556,13 @@ def main():
     snapshot = {"generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "min_score": args.min_score, "n_universe": len(universe),
                 "analysis": claude_analysis(sigs, len(universe)),
-                "signals": sigs, "watch": watch, "tracked": tracked_out, "all": results}
+                "signals": sigs, "watch": watch, "tracked": tracked_out,
+                "structural": structural, "all": results}
     with open(args.out, "w") as fh:
         json.dump(snapshot, fh, indent=2)
     n_sig = len(snapshot["signals"])
-    print(f"\n{n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille · {len(tracked_out)} en suivi -> {args.out}")
+    print(f"\n{n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille · {len(tracked_out)} en suivi "
+          f"· {len(structural)} en amorce structurelle -> {args.out}")
     print("Détection only. Vérifie chaque candidat manuellement avant tout trade.")
 
 

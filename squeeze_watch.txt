@@ -1,0 +1,11 @@
+# SQUEEZE STRUCTUREL — watchlist « pression d'emprunt »
+# Titres à surveiller côté short interest / float / coût d'emprunt, INDÉPENDAMMENT
+# du buzz social. Ils sont scorés en C4 (Ortex SI + float) à chaque cycle et
+# affichés dans la section « ⚙️ Amorce structurelle » du dashboard — même sans
+# étincelle sociale. Si le social s'allume (C1/C2), ils passent en signal plein.
+#
+# Alimente cette liste depuis ton outil emprunt/Ortex (CTB qui flambe, dispo ~0,
+# SI élevé, score short Ortex haut). Un ticker par ligne (sans @, # = commentaire).
+#
+# Dernière revue : 2026-06-29
+HTZ

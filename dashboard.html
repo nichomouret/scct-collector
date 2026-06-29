@@ -121,6 +121,7 @@
     <span class="lg"><b>🔗 Cross-plateforme</b> — buzz simultané sur Reddit ET X/Twitter : confiance accrue.</span>
     <span class="lg"><b style="color:var(--q2)">🔥 Actif</b> — titre en suivi qui bouge encore (var. notable / toujours signal).</span>
     <span class="lg"><b style="color:var(--q1)">🌡️ Refroidit</b> — titre en suivi qui se calme : sortira bientôt du suivi.</span>
+    <span class="lg"><b style="color:var(--hot)">🔫 Chargé</b> — amorce structurelle : carburant (short interest / float) extrême, mais squeeze pas encore allumé socialement.</span>
   </div>
 
   <div id="trackSec" style="margin-top:24px;display:none">
@@ -133,6 +134,18 @@
       <tbody id="trackRows"></tbody>
     </table>
     <p class="small">Le suivi est une aide à la <b>continuité</b>, pas un signal d'entrée/sortie. Vérifie toujours le contexte avant d'agir.</p>
+  </div>
+
+  <div id="structSec" style="margin-top:24px;display:none">
+    <p class="sec-title">⚙️ Amorce structurelle<i class="i" data-tip="Watchlist « pression d'emprunt » (squeeze_watch.txt) : titres à fort short interest / float serré, surveillés côté CARBURANT (C4) même SANS buzz social. 🔫 = fusil chargé (C4 élevé). Une amorce structurelle n'est pas un squeeze tant que l'étincelle sociale (C1/C2) ne prend pas — surveille, ne te précipite pas.">i</i></p>
+    <table>
+      <thead><tr>
+        <th>Titre</th><th>État</th><th>Carburant</th><th>Short %</th><th>Float (M)</th>
+        <th>Prix</th><th>Var. 5j</th><th>Étincelle ?</th>
+      </tr></thead>
+      <tbody id="structRows"></tbody>
+    </table>
+    <p class="small">Carburant sans étincelle = fusil chargé, pas un tir. SCCT reste un détecteur de squeeze social ; cette section est un radar emprunt complémentaire. Alimente <code>squeeze_watch.txt</code> depuis ton outil Ortex.</p>
   </div>
 
   <div id="watchSec" style="margin-top:24px;display:none">
@@ -271,6 +284,31 @@ async function load(){
       trows.appendChild(tr);
     });
   } else { tsec.style.display="none"; }
+
+  // --- Amorce structurelle (watchlist emprunt, carburant sans étincelle) ---
+  const struct=data.structural||[];
+  const ssec=document.getElementById('structSec'), srows=document.getElementById('structRows');
+  srows.innerHTML="";
+  if(struct.length){
+    ssec.style.display="";
+    struct.forEach(r=>{
+      const etat = r.loaded
+        ? '<span style="color:var(--hot)">🔫 chargé</span>'
+        : '<span class="src">surveillance</span>';
+      const spark = (r.has_social||(r.C1>0)||(r.C2>0))
+        ? '<span style="color:var(--q2)">⚡ oui</span>'
+        : '<span class="src">— pas encore</span>';
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="tk">${r.ticker}${ignBadge(r)}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
+        <td>${etat}</td><td><b>${fmt(r.C4)}</b></td>
+        <td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
+        <td>${fmt(r.float_m)}</td>
+        <td>${r.last_price!=null?'$'+r.last_price.toFixed(2):'–'}</td>
+        <td>${r.chg_5d!=null?(r.chg_5d>=0?'+':'')+Math.round(r.chg_5d*100)+'%':'–'}</td>
+        <td>${spark}</td>`;
+      srows.appendChild(tr);
+    });
+  } else { ssec.style.display="none"; }
 
   // --- Sociétés en veille (discutées mais pas un signal) ---
   const watch=data.watch||[];
