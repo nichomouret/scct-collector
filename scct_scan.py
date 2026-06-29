@@ -50,6 +50,8 @@ TD_KEY = os.getenv("TWELVEDATA_API_KEY", "")
 UA = {"User-Agent": "SCCT-Social scan"}
 IGN_MOVE_CAP = float(os.getenv("IGN_MOVE_CAP", "0.15"))   # au-delà, l'ignition s'amortit
 CHASE_MOVE = float(os.getenv("CHASE_MOVE", "0.20"))       # hausse 5j -> flag « déjà parti »
+TRACK_MOVE_ACTIVE = float(os.getenv("TRACK_MOVE_ACTIVE", "0.05"))  # |var 3j| >= => « bouge encore »
+TRACK_GRACE_DAYS = float(os.getenv("TRACK_GRACE_DAYS", "3"))       # délai de calme avant retrait du suivi
 
 _price_cache = {}
 
@@ -343,11 +345,28 @@ def main():
         universe[tk] = {"src": "découverte", **d}
         added += 1
 
+    # 4) SUIVI : on force dans l'univers les titres déjà détectés (persistance),
+    #    pour qu'ils restent scorés même sans buzz ce cycle (re-scoring sticky).
+    tracked_prev = {}
+    if store:
+        try:
+            tracked_prev = {t["ticker"]: t for t in store.tracked_all()}
+        except Exception as e:
+            print(f"(suivi indisponible: {e})", file=sys.stderr)
+    for tk, t in tracked_prev.items():
+        if tk not in universe:
+            universe[tk] = {"src": "suivi", "mentions": None, "prev": None, "name": t.get("name")}
+
     print(f"Univers : {len(universe)} candidats qui buzzent (watchlist active : "
           f"{sum(1 for v in universe.values() if v['src']=='watchlist')} sur {len(wl)} surveillés · "
-          f"découverte : {added}) · C2={'oui' if want_c2 else 'non'}\n")
+          f"découverte : {added} · suivi : {len(tracked_prev)}) · C2={'oui' if want_c2 else 'non'}\n")
     # plafond par cycle : on score les plus buzzants d'abord (borne le coût Ortex)
     cand = sorted(universe.items(), key=lambda x: -(x[1].get("mentions") or 0))[:args.max_score_per_cycle]
+    # garantit que les titres en suivi sont toujours scorés (même hors du top buzz)
+    cand_tks = {t for t, _ in cand}
+    for tk in tracked_prev:
+        if tk not in cand_tks and tk in universe:
+            cand.append((tk, universe[tk]))
     hdr = f"{'Ticker':<7}{'Src':<11}{'C1':>5}{'C2':>6}{'C4':>6}{'C5':>4}{'SCCT':>7}  Quadrant"
     print(hdr); print("-" * (len(hdr) + 6))
     results = []
@@ -362,14 +381,16 @@ def main():
         if name and any(h in name.lower() for h in ETF_NAME_HINTS):
             n_junk += 1
             continue
+        is_tracked = tk in tracked_prev
         c1 = c1_spike(mentions, prev, args.min_mentions)
         c4, float_m, si, si_usd = c4_live(tk, store)
-        # filtre 2 : float inconnu (throttlé/délisté) -> on ne peut pas évaluer -> exclu
-        if float_m is None:
+        # filtre 2 : float inconnu (throttlé/délisté) -> exclu, SAUF si déjà en suivi
+        # (on ne veut pas qu'un titre suivi disparaisse sur un throttle Ortex transitoire)
+        if float_m is None and not is_tracked:
             n_bigfloat += 1
             continue
-        # filtre 3 : univers micro/small-cap (float > plafond -> exclu)
-        if float_m > args.max_float_m:
+        # filtre 3 : univers micro/small-cap (float > plafond -> exclu ; tolérant si suivi)
+        if float_m is not None and float_m > args.max_float_m and not is_tracked:
             n_bigfloat += 1
             continue
         # filtre 4 : grosse cap déguisée (short interest en $ énorme = mega-cap, ex. AMZN)
@@ -413,7 +434,9 @@ def main():
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
                         "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
                         "x_confirmed": x_confirmed, "ignition": ignition,
+                        "chg_3d": round(snap.get("chg_3d"), 3) if snap.get("chg_3d") is not None else None,
                         "chg_5d": round(chg_5d, 3) if chg_5d is not None else None,
+                        "last_price": snap.get("last"),
                         "already_moved": already_moved,
                         "SCCT": sc, "quadrant": q, "has_social": has_social})
         time.sleep(0.2)
@@ -432,6 +455,67 @@ def main():
     watch.sort(key=lambda r: (r.get("ignition") or 0, r["SCCT"]), reverse=True)
     watch = watch[:25]
 
+    # --- SUIVI : persiste les titres détectés, met à jour le statut, retire les calmés ---
+    tracked_out = []
+    if store:
+        import time as _t
+        nowu = _t.time()
+        grace = TRACK_GRACE_DAYS * 86400
+        res_by_tk = {r["ticker"]: r for r in results}
+        sig_tks = {r["ticker"] for r in sigs}
+
+        def _moving(r):
+            if r is None:
+                return False
+            ch = r.get("chg_3d")
+            return (ch is not None and abs(ch) >= TRACK_MOVE_ACTIVE) \
+                or r["ticker"] in sig_tks or (r.get("ignition") or 0) >= 0.5
+
+        # 1) titres déjà suivis : MAJ ou retrait
+        for tk, prev in tracked_prev.items():
+            r = res_by_tk.get(tk)
+            moving = _moving(r)
+            rec = dict(prev)
+            rec["last_seen_utc"] = nowu
+            if r:
+                rec["last_score"] = r["SCCT"]
+                if r.get("last_price") is not None:
+                    rec["last_price"] = r["last_price"]
+                if prev.get("peak_score") is None or r["SCCT"] > prev["peak_score"]:
+                    rec["peak_score"] = r["SCCT"]; rec["peak_utc"] = nowu
+            if moving:
+                rec["last_active_utc"] = nowu
+            # retrait du suivi : calmé depuis plus que le délai de grâce
+            if not moving and (nowu - (rec.get("last_active_utc") or 0)) > grace:
+                store.tracked_delete(tk)
+                continue
+            rec["status"] = "actif" if moving else "refroidit"
+            store.tracked_upsert(rec)
+            tracked_out.append(rec)
+        # 2) nouvelles entrées : signaux ou ignition forte pas encore suivis
+        for r in results:
+            tk = r["ticker"]
+            if tk in tracked_prev:
+                continue
+            if tk in sig_tks or (r.get("ignition") or 0) >= 0.5:
+                rec = {"ticker": tk, "name": r.get("name"), "first_utc": nowu,
+                       "first_price": r.get("last_price"), "last_active_utc": nowu,
+                       "last_seen_utc": nowu, "peak_score": r["SCCT"], "peak_utc": nowu,
+                       "last_score": r["SCCT"], "last_price": r.get("last_price"),
+                       "status": "actif"}
+                store.tracked_upsert(rec)
+                tracked_out.append(rec)
+        # enrichit pour l'affichage : variation depuis la 1ère détection + état courant
+        for rec in tracked_out:
+            fp, lp = rec.get("first_price"), rec.get("last_price")
+            rec["chg_since"] = round((lp - fp) / fp, 3) if (fp and lp and fp > 0) else None
+            cur = res_by_tk.get(rec["ticker"]) or {}
+            rec["quadrant"] = cur.get("quadrant")
+            rec["is_signal"] = rec["ticker"] in sig_tks
+            for k in ("ignition", "already_moved", "chg_5d", "x_confirmed", "x_buzz"):
+                rec[k] = cur.get(k)
+        tracked_out.sort(key=lambda x: (x.get("status") == "actif", x.get("peak_score") or 0), reverse=True)
+
     def f(x): return "-" if x is None else (f"{x:.2f}" if isinstance(x, float) else str(x))
     for r in sigs:
         print(f"{r['ticker']:<7}{r['src']:<11}{f(r['C1']):>5}{f(r['C2']):>6}{f(r['C4']):>6}"
@@ -440,11 +524,11 @@ def main():
     snapshot = {"generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "min_score": args.min_score, "n_universe": len(universe),
                 "analysis": claude_analysis(sigs, len(universe)),
-                "signals": sigs, "watch": watch, "all": results}
-    with open(args.out, "w") as f:
-        json.dump(snapshot, f, indent=2)
+                "signals": sigs, "watch": watch, "tracked": tracked_out, "all": results}
+    with open(args.out, "w") as fh:
+        json.dump(snapshot, fh, indent=2)
     n_sig = len(snapshot["signals"])
-    print(f"\n{n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille -> {args.out}")
+    print(f"\n{n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille · {len(tracked_out)} en suivi -> {args.out}")
     print("Détection only. Vérifie chaque candidat manuellement avant tout trade.")
 
 

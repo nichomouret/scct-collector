@@ -38,7 +38,21 @@ CREATE TABLE IF NOT EXISTS ticker_meta (
     ticker TEXT PRIMARY KEY,
     float_m REAL, si REAL, si_usd REAL, name TEXT, updated_utc REAL
 );
+
+CREATE TABLE IF NOT EXISTS tracked (
+    ticker TEXT PRIMARY KEY,
+    name TEXT,
+    first_utc REAL, first_price REAL,
+    last_active_utc REAL, last_seen_utc REAL,
+    peak_score REAL, peak_utc REAL,
+    last_score REAL, last_price REAL,
+    status TEXT
+);
 """
+
+TRACKED_COLS = ["ticker", "name", "first_utc", "first_price", "last_active_utc",
+                "last_seen_utc", "peak_score", "peak_utc", "last_score",
+                "last_price", "status"]
 
 DDL_PG = DDL_SQLITE.replace("REAL", "DOUBLE PRECISION")
 
@@ -127,6 +141,27 @@ class Store:
                f"ON CONFLICT (ticker) DO UPDATE SET float_m=excluded.float_m, si=excluded.si, "
                f"si_usd=excluded.si_usd, name=excluded.name, updated_utc=excluded.updated_utc")
         cur.execute(sql, (ticker.upper(), float_m, si, si_usd, name, _t.time()))
+        self.conn.commit()
+
+    # --- suivi (tracking) des titres détectés ---
+    def tracked_all(self) -> list[dict]:
+        cur = self.conn.cursor()
+        cur.execute(f"SELECT {', '.join(TRACKED_COLS)} FROM tracked")
+        return [dict(zip(TRACKED_COLS, row)) for row in cur.fetchall()]
+
+    def tracked_upsert(self, rec: dict):
+        cur = self.conn.cursor()
+        ph = ", ".join([self.ph] * len(TRACKED_COLS))
+        updates = ", ".join(f"{c}=excluded.{c}" for c in TRACKED_COLS if c != "ticker")
+        sql = (f"INSERT INTO tracked ({', '.join(TRACKED_COLS)}) VALUES ({ph}) "
+               f"ON CONFLICT (ticker) DO UPDATE SET {updates}")
+        rec = {**rec, "ticker": rec["ticker"].upper()}
+        cur.execute(sql, [rec.get(c) for c in TRACKED_COLS])
+        self.conn.commit()
+
+    def tracked_delete(self, ticker: str):
+        cur = self.conn.cursor()
+        cur.execute(f"DELETE FROM tracked WHERE ticker = {self.ph}", (ticker.upper(),))
         self.conn.commit()
 
     def count(self, table: str = "posts") -> int:
