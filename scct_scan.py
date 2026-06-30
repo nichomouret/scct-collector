@@ -132,6 +132,13 @@ def ignition_score(mention_ratio, trend_history, chg_5d, move_cap=0.15):
 
 W = {"C1": 0.15, "C2": 0.50, "C4": 0.25}  # C3 absent en live, C5 -> quadrant
 Z_SAT = 5.0
+# Social = Reddit ET X au MÊME niveau. Chacun peut déclencher seul ; ensemble = surprime.
+W_SOCIAL = float(os.getenv("W_SOCIAL", "0.65"))   # poids social (= ancien C1+C2)
+W_C4_ = float(os.getenv("W_C4", "0.25"))          # poids carburant
+X_SOC_FLOOR = float(os.getenv("X_SOC_FLOOR", "0.40"))   # X buzz/100 >= => présence sociale X
+CONV_BONUS = float(os.getenv("CONV_BONUS", "0.30"))     # surprime de convergence Reddit×X
+X_DISCOVERY = int(os.getenv("X_DISCOVERY", "40"))       # nb de titres trending X injectés
+C2_MISSING_DAMP = float(os.getenv("C2_MISSING_DAMP", "0.50"))  # poids du volume si C2 absent
 
 # ETF / indices courants à exclure (pas des cibles de squeeze micro-cap)
 ETF_BLOCK = {"SPY", "QQQ", "VOO", "IVV", "VTI", "SGOV", "USO", "USO", "SOXL", "SOXS",
@@ -254,13 +261,32 @@ def c5_live(tk):
     return r.get("C5", 0)
 
 
-def score(c1, c2, c4):
-    comps = {"C1": (c1, W["C1"]), "C2": (c2, W["C2"]), "C4": (c4, W["C4"])}
-    used = {k: (v, w) for k, (v, w) in comps.items()
-            if v is not None or k == "C1"}  # C1 social-absence=0 garanti
-    used = {k: ((v if v is not None else 0.0), w) for k, (v, w) in used.items()}
-    wsum = sum(w for _, w in used.values())
-    return round(sum(v * w for v, w in used.values()) / wsum * 100, 1) if wsum else 0.0
+def social_scores(c1, c2, x_buzz):
+    """Reddit et X au MÊME niveau. Renvoie (reddit_soc, x_soc, social, coupled).
+    - reddit_soc : force sociale Reddit (coordination C2 prioritaire, spike C1 en appoint).
+    - x_soc      : force sociale X (buzz normalisé 0-1).
+    - social     : max des deux + SURPRIME de convergence quand les DEUX sont présents.
+    - coupled    : Reddit ET X présents simultanément (signal cross-plateforme)."""
+    # Reddit : coordination (C2) prioritaire. Sans C2 mesurable (pas de Pro / peu de
+    # données), le volume seul (C1) ne compte qu'à moitié — un spike sans coordination
+    # confirmée = suspect (pump/bruit), il ne doit pas saturer l'axe social.
+    if c2 is not None:
+        reddit = 0.30 * (c1 or 0) + 0.70 * c2
+    else:
+        reddit = C2_MISSING_DAMP * (c1 or 0.0)
+    xs = clamp((x_buzz or 0) / 100.0)
+    coupled = reddit > 0 and xs >= X_SOC_FLOOR
+    social = clamp(max(reddit, xs) + (CONV_BONUS * min(reddit, xs) if coupled else 0.0))
+    return round(reddit, 3), round(xs, 3), round(social, 3), coupled
+
+
+def score(social, c4):
+    """SCCT = social (Reddit+X, surprime incluse) + carburant C4. C4 manquant -> exclu."""
+    parts = [(social, W_SOCIAL)]
+    if c4 is not None:
+        parts.append((c4, W_C4_))
+    wsum = sum(w for _, w in parts)
+    return round(sum(v * w for v, w in parts) / wsum * 100, 1) if wsum else 0.0
 
 
 def claude_analysis(signals, n_universe):
@@ -300,10 +326,10 @@ def claude_analysis(signals, n_universe):
         return f"(analyse Claude indisponible : {e})"
 
 
-def quadrant(c1, c5):
-    # axe 2 = catalyseur (C5) ; antériorité C3 absente en live -> proxy par spike fort
+def quadrant(social, c5):
+    # axe spike = force sociale (Reddit+X) ; axe ancrage = catalyseur (C5)
     anchor = c5 and c5 >= 0.5
-    return ("Q2 convergence" if anchor else "Q1 pump pur") if c1 and c1 >= 0.5 else \
+    return ("Q2 convergence" if anchor else "Q1 pump pur") if social and social >= 0.5 else \
            ("Q4 rerating" if anchor else "Q3 bruit")
 
 
@@ -363,6 +389,20 @@ def main():
         universe[tk] = {"src": "découverte", **d}
         added += 1
 
+    # 3b) DÉCOUVERTE X : titres tendance sur X/Twitter (même rang que Reddit/ApeWisdom).
+    #     Permet d'attraper un squeeze qui s'allume sur X mais reste calme sur Reddit.
+    n_x = 0
+    if os.getenv("X_ENABLED", "1") in ("1", "true", "yes") and X_DISCOVERY > 0:
+        for it in X.x_trending(limit=X_DISCOVERY):
+            xtk = str(it.get("ticker", "")).upper()
+            if not xtk or xtk in universe or xtk in JUNK or xtk in ETF_BLOCK:
+                continue
+            nm = it.get("company_name")
+            if nm and any(h in nm.lower() for h in ETF_NAME_HINTS):
+                continue
+            universe[xtk] = {"src": "X-buzz", "mentions": None, "prev": None, "name": nm}
+            n_x += 1
+
     # 4) SUIVI : on force dans l'univers les titres déjà détectés (persistance),
     #    pour qu'ils restent scorés même sans buzz ce cycle (re-scoring sticky).
     tracked_prev = {}
@@ -379,14 +419,16 @@ def main():
         if tk not in universe:
             universe[tk] = {"src": "structurel", "mentions": None, "prev": None, "name": None}
 
-    print(f"Univers : {len(universe)} candidats qui buzzent (watchlist active : "
-          f"{sum(1 for v in universe.values() if v['src']=='watchlist')} sur {len(wl)} surveillés · "
-          f"découverte : {added} · suivi : {len(tracked_prev)}) · C2={'oui' if want_c2 else 'non'}\n")
+    print(f"Univers : {len(universe)} candidats (watchlist active : "
+          f"{sum(1 for v in universe.values() if v['src']=='watchlist')} sur {len(wl)} · "
+          f"découverte Reddit : {added} · découverte X : {n_x} · suivi : {len(tracked_prev)}) · "
+          f"C2={'oui' if want_c2 else 'non'}\n")
     # plafond par cycle : on score les plus buzzants d'abord (borne le coût Ortex)
     cand = sorted(universe.items(), key=lambda x: -(x[1].get("mentions") or 0))[:args.max_score_per_cycle]
-    # garantit que les titres en suivi ET en watchlist emprunt sont toujours scorés
+    # garantit que suivi + watchlist emprunt + découverte X sont toujours scorés
     cand_tks = {t for t, _ in cand}
-    for tk in set(tracked_prev) | SQUEEZE_WATCH:
+    forced = set(tracked_prev) | SQUEEZE_WATCH | {t for t, v in universe.items() if v.get("src") == "X-buzz"}
+    for tk in forced:
         if tk not in cand_tks and tk in universe:
             cand.append((tk, universe[tk]))
     hdr = f"{'Ticker':<7}{'Src':<11}{'C1':>5}{'C2':>6}{'C4':>6}{'C5':>4}{'SCCT':>7}  Quadrant"
@@ -426,15 +468,8 @@ def main():
             continue
         c2 = c2_live(tk, want_c2)
         c5 = c5_live(tk)
-        sc = score(c1, c2, c4)
-        q = quadrant(c1, c5)
-        # présence sociale = spike de mentions (C1) OU coordination (C2). SCCT détecte
-        # des squeezes SOCIAUX : sans présence sociale, un titre n'est PAS un signal
-        # (quel que soit son float/catalyseur) — il peut au mieux aller en « veille ».
-        has_social = bool(c1) or bool(c2 and c2 > 0)
-        # --- signal X/Twitter (cross-validation + comptes confirmés) ---
+        # --- signal X/Twitter (source sociale de MÊME rang que Reddit) ---
         x_buzz = x_sent = None
-        cross = False
         x_confirmed = []
         xs = None
         if os.getenv("X_ENABLED", "1") in ("1", "true", "yes"):
@@ -442,10 +477,15 @@ def main():
             if xs:
                 x_buzz = xs.get("buzz_score")
                 x_sent = xs.get("sentiment_score")
-                # cross-plateforme : buzz Reddit (mentions) ET buzz X significatif
-                cross = bool((mentions or 0) >= args.min_mentions and (x_buzz or 0) >= 40)
-                # comptes à edge confirmé actifs sur le titre = élément de confirmation
                 x_confirmed = X.confirmed_in_stock(xs, CONFIRMED)
+        # --- score social : Reddit ET X au même niveau, surprime si les deux ---
+        reddit_soc, x_soc, social, coupled = social_scores(c1, c2, x_buzz)
+        cross = coupled                      # 🔗 = convergence Reddit×X (surprime appliquée)
+        sc = score(social, c4)
+        q = quadrant(social, c5)
+        # présence sociale = Reddit (C1/C2) OU X (buzz suffisant). Sans aucune présence
+        # sociale, un titre n'est PAS un signal (quel que soit son float/catalyseur).
+        has_social = reddit_soc > 0 or x_soc >= X_SOC_FLOOR
         # --- détection précoce : ignition (buzz qui accélère AVANT le gros move) ---
         snap = price_snapshot(tk)          # déjà appelé par le filtre cotation (cache)
         chg_5d = snap.get("chg_5d")
@@ -457,6 +497,7 @@ def main():
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
                         "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
                         "x_confirmed": x_confirmed, "ignition": ignition,
+                        "reddit_soc": reddit_soc, "x_soc": x_soc, "social": social,
                         "chg_3d": round(snap.get("chg_3d"), 3) if snap.get("chg_3d") is not None else None,
                         "chg_5d": round(chg_5d, 3) if chg_5d is not None else None,
                         "last_price": snap.get("last"),

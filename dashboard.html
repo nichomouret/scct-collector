@@ -106,7 +106,7 @@
       <th>Catalys.<i class="i" data-tip="C5 — catalyseur daté (0/1) : 8-K ou earnings près de l'événement. Sert à placer le quadrant.">i</i></th>
       <th>Float (M)<i class="i" data-tip="Free float en millions d'actions. Plus c'est petit, plus c'est squeezable.">i</i></th>
       <th>Short %<i class="i" data-tip="Short interest en % du float. Élevé = beaucoup de vendeurs à découvert à racheter.">i</i></th>
-      <th>X buzz<i class="i" data-tip="Buzz X/Twitter (0–100, Adanos). 🔗 = confirmé sur X ET Reddit. ✅ = un compte X à edge prouvé (track-record qui bat le hasard) est actif sur le titre — élément de confirmation fort.">i</i></th>
+      <th>X buzz<i class="i" data-tip="Buzz X/Twitter (0–100, Adanos) — source sociale de MÊME rang que Reddit (peut déclencher seul). 🔗 = Reddit ET X présents = surprime de convergence sur le score. ✅ = compte X à edge prouvé actif. Survole le Score pour voir le détail Reddit/X.">i</i></th>
       <th>Score<i class="i" data-tip="Score global 0–100. Au-delà de ~60 et en Q2 = à regarder sérieusement.">i</i></th>
       <th>Type<i class="i" data-tip="Q2 convergence (idéal) · Q1 pump pur (risqué) · Q3 bruit · Q4 fondamental (hors scope).">i</i></th>
     </tr></thead>
@@ -118,7 +118,7 @@
     <span class="lg"><b>⚡ Ignition précoce</b> — le buzz s'accélère <i>avant</i> que le prix ait bougé : entrée potentiellement en amont, plus tôt mais plus risquée.</span>
     <span class="lg"><b style="color:var(--q1)">⚠ Déjà parti</b> — le titre a déjà couru (&gt;20 % sur 5 j) : risque de chasing, ce n'est pas une entrée fraîche.</span>
     <span class="lg"><b style="color:var(--q2)">✅ Compte confirmé</b> — un compte X au track-record prouvé (bat le hasard) est actif sur le titre : élément de confirmation.</span>
-    <span class="lg"><b>🔗 Cross-plateforme</b> — buzz simultané sur Reddit ET X/Twitter : confiance accrue.</span>
+    <span class="lg"><b>🔗 Cross-plateforme</b> — buzz sur Reddit ET X simultanément : surprime de convergence ajoutée au score social.</span>
     <span class="lg"><b style="color:var(--q2)">🔥 Actif</b> — titre en suivi qui bouge encore (var. notable / toujours signal).</span>
     <span class="lg"><b style="color:var(--q1)">🌡️ Refroidit</b> — titre en suivi qui se calme : sortira bientôt du suivi.</span>
     <span class="lg"><b style="color:var(--hot)">🔫 Chargé</b> — amorce structurelle : carburant (short interest / float) extrême, mais squeeze pas encore allumé socialement.</span>
@@ -167,7 +167,7 @@
     <div class="cell cQ3"><h4>⚪ Q3 — Bruit (à ignorer)</h4><div id="q3"></div></div>
   </div>
 
-  <p class="small">Score = Volume·0,15 + Coordination·0,50 + C3·0,10 + Carburant·0,25 (Catalyseur → type). Sources : ApeWisdom (mentions) · Adanos (coordination) · Ortex (float/short) · SEC (catalyseur).</p>
+  <p class="small">Score = Social·0,65 + Carburant·0,25 (Catalyseur → quadrant). Social = Reddit (coordination C2 + volume C1) ET X buzz au même rang, avec surprime de convergence si les deux. Sources : ApeWisdom + X-trending (découverte) · Adanos (coordination Reddit + buzz X) · Ortex (float/short) · SEC (catalyseur).</p>
   <p class="disc">Outil de DÉTECTION uniquement — pas un conseil financier. Vérifie chaque candidat à la main (float, short interest, catalyseur, contexte) avant tout trade. Le score n'est pas une garantie.</p>
 </div>
 
@@ -177,6 +177,10 @@ function qClass(q){ return q&&q.includes("Q1")?"qQ1":q&&q.includes("Q2")?"qQ2":q
 function qShort(q){ return (q||"").split(" ")[0]; }
 function confBadge(r){ return (r.x_confirmed&&r.x_confirmed.length)
   ? ` <span title="Compte X à edge confirmé actif : @${r.x_confirmed.join(', @')}" style="cursor:help">✅</span>` : ""; }
+function socialTitle(r){
+  if(r.social==null) return '';
+  return `Social ${Math.round(r.social*100)}/100 — Reddit ${Math.round((r.reddit_soc||0)*100)} · X ${Math.round((r.x_soc||0)*100)}${r.cross?' · 🔗 couplé (surprime de convergence)':''}`;
+}
 function ignBadge(r){
   if(r.already_moved) return ` <span title="Mouvement déjà entamé (+${Math.round((r.chg_5d||0)*100)}% sur 5j) — risque de chasing, pas une entrée fraîche" style="cursor:help;color:var(--q1)">⚠</span>`;
   if(r.ignition!=null&&r.ignition>=0.5) return ` <span title="Ignition précoce : buzz en accélération avant un gros move (en amont). Plus tôt, mais plus risqué." style="cursor:help">⚡</span>`;
@@ -253,7 +257,7 @@ async function load(){
       <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td><td>${fmt(r.C5)}</td>
       <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
       <td>${r.x_buzz!=null?Math.round(r.x_buzz):'–'}${r.cross?' 🔗':''}${confBadge(r)}</td>
-      <td class="scorewrap"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
+      <td class="scorewrap" title="${socialTitle(r)}"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
       <td><span class="q ${qClass(r.quadrant)}">${q}</span></td>`;
     rows.appendChild(tr);
     const k=q==="Q1"?"q1":q==="Q2"?"q2":q==="Q4"?"q4":"q3"; buckets[k].push(r.ticker);
