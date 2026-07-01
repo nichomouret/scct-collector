@@ -136,18 +136,6 @@
     <span class="lg"><b style="color:var(--hot)">🔫 Chargé</b> — amorce structurelle : carburant (short interest / float) extrême, mais squeeze pas encore allumé socialement.</span>
   </div>
 
-  <div id="trackSec" style="margin-top:24px;display:none">
-    <p class="sec-title">🛰️ En suivi<i class="i" data-tip="Titres déjà détectés, gardés en mémoire et re-scorés à chaque cycle tant qu'ils BOUGENT (même s'ils ne buzzent plus). Ils ne disparaissent plus pour un creux transitoire. 🔥 = encore actif · 🌡️ = en refroidissement (sort bientôt). Une disparition ici ≠ signal de vente.">i</i></p>
-    <table>
-      <thead><tr>
-        <th>Titre</th><th>Statut</th><th>1ère détection</th><th>Score (pic)</th>
-        <th>Prix</th><th>Depuis détection</th><th>Var. 5j</th><th>Type</th>
-      </tr></thead>
-      <tbody id="trackRows"></tbody>
-    </table>
-    <p class="small">Le suivi est une aide à la <b>continuité</b>, pas un signal d'entrée/sortie. Vérifie toujours le contexte avant d'agir.</p>
-  </div>
-
   <div id="structSec" style="margin-top:24px;display:none">
     <p class="sec-title">⚙️ Amorce structurelle<i class="i" data-tip="Watchlist « pression d'emprunt » (squeeze_watch.txt) : titres à fort short interest / float serré, surveillés côté CARBURANT (C4) même SANS buzz social. 🔫 = fusil chargé (C4 élevé). Une amorce structurelle n'est pas un squeeze tant que l'étincelle sociale (C1/C2) ne prend pas — surveille, ne te précipite pas.">i</i></p>
     <table>
@@ -307,30 +295,6 @@ async function load(){
   });
   document.getElementById('emptymsg').innerHTML = sig.length? "" :
     '<div style="padding:24px;text-align:center;color:var(--muted)">Aucun candidat au-dessus du seuil. Période calme — comportement normal.</div>';
-
-  // --- Titres en suivi (persistance / continuité) ---
-  const tracked=data.tracked||[];
-  const tsec=document.getElementById('trackSec'), trows=document.getElementById('trackRows');
-  trows.innerHTML="";
-  const pct=v=>v==null?'–':(v>=0?'+':'')+Math.round(v*100)+'%';
-  const dateFR=u=>u?new Date(u*1000).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}):'–';
-  if(tracked.length){
-    tsec.style.display="";
-    tracked.forEach(r=>{
-      const st = r.status==='actif'
-        ? '<span style="color:var(--q2)">🔥 actif</span>'
-        : '<span style="color:var(--q1)">🌡️ refroidit</span>';
-      const since = r.chg_since==null?'–':`<span style="color:${r.chg_since>=0?'var(--q2)':'var(--hot)'}">${pct(r.chg_since)}</span>`;
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td class="tk">${r.ticker}${ignBadge(r)}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
-        <td>${st}</td><td class="src">${dateFR(r.first_utc)}</td>
-        <td><b>${r.last_score!=null?Math.round(r.last_score):'–'}</b> <span class="src">(${r.peak_score!=null?Math.round(r.peak_score):'–'})</span></td>
-        <td>${r.last_price!=null?'$'+r.last_price.toFixed(2):'–'}</td>
-        <td>${since}</td><td>${pct(r.chg_5d)}</td>
-        <td>${r.quadrant?`<span class="q ${qClass(r.quadrant)}">${qShort(r.quadrant)}</span>`:'–'}</td>`;
-      trows.appendChild(tr);
-    });
-  } else { tsec.style.display="none"; }
 
   // --- Amorce structurelle (watchlist emprunt, carburant sans étincelle) ---
   const struct=data.structural||[];
