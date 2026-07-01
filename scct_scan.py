@@ -48,8 +48,10 @@ ADANOS_KEY = os.getenv("ADANOS_API_KEY", "")
 ADANOS_BASE = os.getenv("ADANOS_BASE", "https://api.adanos.org/reddit/stocks")
 TD_KEY = os.getenv("TWELVEDATA_API_KEY", "")
 UA = {"User-Agent": "SCCT-Social scan"}
-IGN_MOVE_CAP = float(os.getenv("IGN_MOVE_CAP", "0.15"))   # au-delà, l'ignition s'amortit
+IGN_MOVE_CAP = float(os.getenv("IGN_MOVE_CAP", "0.15"))   # au-delà (tous horizons), l'ignition s'amortit
 CHASE_MOVE = float(os.getenv("CHASE_MOVE", "0.20"))       # hausse 5j -> flag « déjà parti »
+CHASE_21D = float(os.getenv("CHASE_21D", "0.60"))         # hausse 1 mois -> déjà parti
+CHASE_63D = float(os.getenv("CHASE_63D", "1.50"))         # hausse 3 mois -> déjà parti (mature)
 TRACK_MOVE_ACTIVE = float(os.getenv("TRACK_MOVE_ACTIVE", "0.05"))  # |var 3j| >= => « bouge encore »
 TRACK_GRACE_DAYS = float(os.getenv("TRACK_GRACE_DAYS", "3"))       # délai de calme avant retrait du suivi
 STRUCT_C4 = float(os.getenv("STRUCT_C4", "0.50"))                  # C4 >= => « fusil chargé » (amorce structurelle)
@@ -78,13 +80,14 @@ def price_snapshot(tk, max_age_days=10):
     Fail-open : pas de clé / erreur réseau -> tradeable=True (on ne bloque pas)."""
     if tk in _price_cache:
         return _price_cache[tk]
-    snap = {"tradeable": True, "last": None, "chg_3d": None, "chg_5d": None}
+    snap = {"tradeable": True, "last": None, "chg_3d": None, "chg_5d": None,
+            "chg_21d": None, "chg_63d": None, "run_max": None}
     if not TD_KEY:
         _price_cache[tk] = snap
         return snap
     try:
         r = requests.get("https://api.twelvedata.com/time_series",
-                         params={"symbol": tk, "interval": "1day", "outputsize": 8,
+                         params={"symbol": tk, "interval": "1day", "outputsize": 70,
                                  "apikey": TD_KEY}, headers=UA, timeout=20)
         js = r.json()
         vals = js.get("values") if isinstance(js, dict) else None
@@ -100,10 +103,14 @@ def price_snapshot(tk, max_age_days=10):
                 pass
             if closes:
                 snap["last"] = closes[0]
-                if len(closes) > 3 and closes[3] > 0:
-                    snap["chg_3d"] = (closes[0] - closes[3]) / closes[3]
-                if len(closes) > 5 and closes[5] > 0:
-                    snap["chg_5d"] = (closes[0] - closes[5]) / closes[5]
+                def _chg(n):
+                    return (closes[0] - closes[n]) / closes[n] if len(closes) > n and closes[n] > 0 else None
+                snap["chg_3d"] = _chg(3)      # ~3 séances
+                snap["chg_5d"] = _chg(5)      # ~1 semaine
+                snap["chg_21d"] = _chg(21)    # ~1 mois
+                snap["chg_63d"] = _chg(63)    # ~3 mois
+                runs = [c for c in (snap["chg_5d"], snap["chg_21d"], snap["chg_63d"]) if c is not None]
+                snap["run_max"] = max(runs) if runs else None   # plus forte hausse récente
     except Exception:
         pass                               # réseau : ne pas bloquer
     _price_cache[tk] = snap
@@ -114,11 +121,11 @@ def is_tradeable(tk, max_age_days=10):
     return price_snapshot(tk, max_age_days)["tradeable"]
 
 
-def ignition_score(mention_ratio, trend_history, chg_5d, move_cap=0.15):
+def ignition_score(mention_ratio, trend_history, run_up, move_cap=0.15):
     """Signal d'IGNITION PRÉCOCE : buzz en accélération AVANT que le prix ait
     beaucoup bougé. Élevé = coordination naissante (en amont), pas un move déjà
-    consommé. Combine l'accélération du buzz X (dérivée de trend_history) et celle
-    des mentions Reddit, amortie si le titre a déjà couru (anti-chasing)."""
+    consommé. `run_up` = plus forte hausse récente TOUS horizons (5j/1m/3m) :
+    un titre déjà bien parti (même sur 3 mois) voit son ignition écrasée (anti-chasing)."""
     accel = 0.0
     th = [float(x) for x in (trend_history or []) if isinstance(x, (int, float))]
     if len(th) >= 4:
@@ -126,8 +133,8 @@ def ignition_score(mention_ratio, trend_history, chg_5d, move_cap=0.15):
         accel = clamp((th[-1] - prior) / max(prior, 1.0))
     mr = clamp((mention_ratio - 1) / 2.0) if mention_ratio else 0.0
     raw = 0.5 * accel + 0.5 * mr
-    if chg_5d is not None and chg_5d > move_cap:   # move déjà entamé -> on amortit
-        raw *= clamp(1 - (chg_5d - move_cap) / move_cap)   # > 2x le cap -> ~0
+    if run_up is not None and run_up > move_cap:   # déjà parti (n'importe quel horizon)
+        raw *= clamp(1 - (run_up - move_cap) / move_cap)   # > 2x le cap -> ~0
     return round(clamp(raw), 3)
 
 W = {"C1": 0.15, "C2": 0.50, "C4": 0.25}  # C3 absent en live, C5 -> quadrant
@@ -488,11 +495,15 @@ def main():
         has_social = reddit_soc > 0 or x_soc >= X_SOC_FLOOR
         # --- détection précoce : ignition (buzz qui accélère AVANT le gros move) ---
         snap = price_snapshot(tk)          # déjà appelé par le filtre cotation (cache)
-        chg_5d = snap.get("chg_5d")
+        chg_5d, chg_21d, chg_63d = snap.get("chg_5d"), snap.get("chg_21d"), snap.get("chg_63d")
+        run_max = snap.get("run_max")
         mention_ratio = (mentions or 0) / max(prev or 0, 1)
         ignition = ignition_score(mention_ratio, xs.get("trend_history") if xs else None,
-                                  chg_5d, IGN_MOVE_CAP)
-        already_moved = chg_5d is not None and chg_5d >= CHASE_MOVE
+                                  run_max, IGN_MOVE_CAP)
+        # « déjà parti » = a déjà couru sur AU MOINS UN horizon (semaine / mois / trimestre)
+        already_moved = (chg_5d is not None and chg_5d >= CHASE_MOVE) \
+            or (chg_21d is not None and chg_21d >= CHASE_21D) \
+            or (chg_63d is not None and chg_63d >= CHASE_63D)
         results.append({"ticker": tk, "name": name, "src": d.get("src", "?"), "mentions": mentions,
                         "C1": c1, "C2": c2, "C4": c4, "C5": c5, "float_m": float_m,
                         "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
@@ -500,6 +511,9 @@ def main():
                         "reddit_soc": reddit_soc, "x_soc": x_soc, "social": social,
                         "chg_3d": round(snap.get("chg_3d"), 3) if snap.get("chg_3d") is not None else None,
                         "chg_5d": round(chg_5d, 3) if chg_5d is not None else None,
+                        "chg_21d": round(chg_21d, 3) if chg_21d is not None else None,
+                        "chg_63d": round(chg_63d, 3) if chg_63d is not None else None,
+                        "run_max": round(run_max, 3) if run_max is not None else None,
                         "last_price": snap.get("last"),
                         "already_moved": already_moved,
                         "SCCT": sc, "quadrant": q, "has_social": has_social})
