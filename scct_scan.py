@@ -52,6 +52,8 @@ IGN_MOVE_CAP = float(os.getenv("IGN_MOVE_CAP", "0.15"))   # au-delà (tous horiz
 CHASE_MOVE = float(os.getenv("CHASE_MOVE", "0.20"))       # hausse 5j -> flag « déjà parti »
 CHASE_21D = float(os.getenv("CHASE_21D", "0.60"))         # hausse 1 mois -> déjà parti
 CHASE_63D = float(os.getenv("CHASE_63D", "1.50"))         # hausse 3 mois -> déjà parti (mature)
+PEPITE_MIN = float(os.getenv("PEPITE_MIN", "60"))         # score mini pour être une « pépite »
+PEPITE_C4 = float(os.getenv("PEPITE_C4", "0.45"))         # carburant mini pour une pépite
 TRACK_MOVE_ACTIVE = float(os.getenv("TRACK_MOVE_ACTIVE", "0.05"))  # |var 3j| >= => « bouge encore »
 TRACK_GRACE_DAYS = float(os.getenv("TRACK_GRACE_DAYS", "3"))       # délai de calme avant retrait du suivi
 STRUCT_C4 = float(os.getenv("STRUCT_C4", "0.50"))                  # C4 >= => « fusil chargé » (amorce structurelle)
@@ -524,6 +526,13 @@ def main():
     results.sort(key=lambda r: r["SCCT"], reverse=True)
     # SIGNAUX = présence sociale (C1 ou C2) ET score >= seuil
     sigs = [r for r in results if r["SCCT"] >= args.min_score and r["has_social"]]
+    # PÉPITES = la crème : FRAIS (pas déjà parti) + carburant réel + score élevé.
+    # Q2 (convergence) prioritaire, puis score. C'est la sélection resserrée à trader.
+    gems = [r for r in sigs if not r.get("already_moved")
+            and (r.get("C4") or 0) >= PEPITE_C4 and r["SCCT"] >= PEPITE_MIN]
+    gems.sort(key=lambda r: (("Q2" in (r.get("quadrant") or "")), r["SCCT"]), reverse=True)
+    for r in results:
+        r["pepite"] = r in gems
     # VEILLE = titres réellement discutés (mentions >= seuil) mais pas (encore) un
     # signal : soit score sous le seuil, soit pas (encore) de présence sociale.
     sig_ids = {id(r) for r in sigs}
@@ -611,13 +620,13 @@ def main():
     snapshot = {"generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "min_score": args.min_score, "n_universe": len(universe),
                 "analysis": claude_analysis(sigs, len(universe)),
-                "signals": sigs, "watch": watch, "tracked": tracked_out,
+                "gems": gems, "signals": sigs, "watch": watch, "tracked": tracked_out,
                 "structural": structural, "all": results}
     with open(args.out, "w") as fh:
         json.dump(snapshot, fh, indent=2)
     n_sig = len(snapshot["signals"])
-    print(f"\n{n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille · {len(tracked_out)} en suivi "
-          f"· {len(structural)} en amorce structurelle -> {args.out}")
+    print(f"\n⭐ {len(gems)} pépites · {n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille · "
+          f"{len(tracked_out)} en suivi · {len(structural)} en amorce structurelle -> {args.out}")
     print("Détection only. Vérifie chaque candidat manuellement avant tout trade.")
 
 

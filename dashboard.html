@@ -89,6 +89,18 @@
     <div class="vtxt"><p class="vtitle" id="vtitle">…</p><p class="vsub" id="vsub"></p></div>
   </div>
 
+  <div id="gemsSec" style="display:none">
+    <p class="sec-title" style="color:var(--q2)">⭐ Pépites — la sélection resserrée<i class="i" data-tip="La crème : titres FRAIS (pas encore partis, aucun ⚠), avec carburant réel (C4 élevé) ET présence sociale, score élevé. Q2 (convergence) en tête. C'est la shortlist à examiner en priorité — le reste est en dessous.">i</i></p>
+    <table>
+      <thead><tr>
+        <th>Titre</th><th>D'où</th><th>Social</th><th>Carburant</th><th>Short %</th>
+        <th>Float (M)</th><th>Prix</th><th>Score</th><th>Type</th>
+      </tr></thead>
+      <tbody id="gemsRows"></tbody>
+    </table>
+    <p class="small">Pépite = frais + chargé + social. Ça ne veut pas dire « acheter » — vérif manuelle obligatoire (contexte, catalyseur, risque).</p>
+  </div>
+
   <div class="analysis">
     <h3>🤖 Analyse Claude</h3>
     <p class="verdline" id="verdline"></p>
@@ -193,9 +205,10 @@ function ignBadge(r){
   return "";
 }
 
-function setVerdict(signals, watch){
+function setVerdict(signals, watch, gems){
   const el=document.getElementById('verdict'), dot=document.getElementById('vdot'),
         t=document.getElementById('vtitle'), s=document.getElementById('vsub');
+  gems=gems||[];
   const igni=(watch||[]).concat(signals).filter(r=>r.ignition!=null&&r.ignition>=0.5&&!r.already_moved)
         .sort((a,b)=>b.ignition-a.ignition);
   const actionable=signals.filter(r=>r.quadrant&&(r.quadrant.includes('Q1')||r.quadrant.includes('Q2')));
@@ -203,12 +216,17 @@ function setVerdict(signals, watch){
   const warm=actionable.filter(r=>r.SCCT>=55).sort((a,b)=>b.SCCT-a.SCCT);
   const confirmed=signals.filter(r=>r.x_confirmed&&r.x_confirmed.length).sort((a,b)=>b.SCCT-a.SCCT);
   el.className="verdict v-green";
-  if(q2strong.length){
+  if(gems.length){
     el.className="verdict v-red"; dot.textContent="🔴";
-    const c=q2strong.find(r=>r.x_confirmed&&r.x_confirmed.length);
-    t.textContent="SIGNAL — "+q2strong[0].ticker+" (score "+q2strong[0].SCCT+", convergence Q2)";
-    s.textContent=(c?"✅ Compte X confirmé actif (@"+c.x_confirmed.join(', @')+"). ":"")
-      +"Convergence social + carburant. À examiner sérieusement (vérif manuelle obligatoire).";
+    const g=gems[0], c=gems.find(r=>r.x_confirmed&&r.x_confirmed.length);
+    t.textContent="⭐ PÉPITE — "+g.ticker+" (score "+g.SCCT+", "+qShort(g.quadrant)+", frais)";
+    s.textContent=(gems.length>1?gems.length+" pépites fraîches. ":"")
+      +(c?"✅ Compte X confirmé actif. ":"")
+      +"Frais (pas encore parti) + carburant + social. Vérif manuelle obligatoire.";
+  } else if(q2strong.length){
+    el.className="verdict v-orange"; dot.textContent="🟠";
+    t.textContent="Convergence Q2 — "+q2strong[0].ticker+" (score "+q2strong[0].SCCT+")";
+    s.textContent="Convergence social + carburant, mais déjà en mouvement (pas une entrée fraîche). Vérif manuelle.";
   } else if(confirmed.length){
     el.className="verdict v-orange"; dot.textContent="🟠";
     t.textContent="À surveiller — "+confirmed[0].ticker+" (✅ compte X confirmé actif)";
@@ -250,8 +268,27 @@ async function load(){
   const sig=data.signals||[];
   document.getElementById('meta').textContent =
     `${sig.length} candidats · scan du ${data.generated_utc?new Date(data.generated_utc).toLocaleString('fr-FR'):'—'}`;
-  setVerdict(sig, data.watch||[]);
+  setVerdict(sig, data.watch||[], data.gems||[]);
   renderAnalysis(data.analysis);
+
+  // --- ⭐ Pépites (crème : frais + chargé + social) ---
+  const gems=data.gems||[];
+  const gsec=document.getElementById('gemsSec'), grows=document.getElementById('gemsRows');
+  grows.innerHTML="";
+  if(gems.length){
+    gsec.style.display="";
+    gems.forEach(r=>{
+      const tr=document.createElement('tr'); tr.className="hot";
+      tr.innerHTML=`<td class="tk">⭐ ${r.ticker}${ignBadge(r)}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
+        <td class="src">${r.src||''}</td>
+        <td title="${socialTitle(r)}"><b>${r.social!=null?Math.round(r.social*100):'–'}</b></td>
+        <td>${fmt(r.C4)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
+        <td>${fmt(r.float_m)}</td><td>${r.last_price!=null?'$'+r.last_price.toFixed(2):'–'}</td>
+        <td class="scorewrap"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
+        <td><span class="q ${qClass(r.quadrant)}">${qShort(r.quadrant)}</span></td>`;
+      grows.appendChild(tr);
+    });
+  } else { gsec.style.display="none"; }
 
   const rows=document.getElementById('rows'); rows.innerHTML="";
   const buckets={q1:[],q2:[],q3:[],q4:[]};
