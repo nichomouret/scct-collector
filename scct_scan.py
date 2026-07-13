@@ -148,6 +148,10 @@ X_SOC_FLOOR = float(os.getenv("X_SOC_FLOOR", "0.40"))   # X buzz/100 >= => prés
 CONV_BONUS = float(os.getenv("CONV_BONUS", "0.30"))     # surprime de convergence Reddit×X
 X_DISCOVERY = int(os.getenv("X_DISCOVERY", "40"))       # nb de titres trending X injectés
 C2_MISSING_DAMP = float(os.getenv("C2_MISSING_DAMP", "0.50"))  # poids du volume si C2 absent
+# --- Budgets d'appels Adanos par cycle (rester sous 250k req/mois du plan Passe-temps) ---
+X_STOCK_MAX = int(os.getenv("X_STOCK_MAX", "60"))   # nb max d'appels X buzz (x_stock)/cycle
+C2_MAX_CALLS = int(os.getenv("C2_MAX_CALLS", "20"))  # nb max de candidats scorés en C2 (3 appels chacun)/cycle
+TRACK_MAX = int(os.getenv("TRACK_MAX", "40"))        # nb max de titres suivis re-scorés/cycle
 
 # ETF / indices courants à exclure (pas des cibles de squeeze micro-cap)
 ETF_BLOCK = {"SPY", "QQQ", "VOO", "IVV", "VTI", "SGOV", "USO", "USO", "SOXL", "SOXS",
@@ -161,6 +165,17 @@ JUNK = STOPLIST | {"API", "JUST", "WTI", "WH", "UP", "IT", "DC", "EU", "UAE", "Y
 # Filtre par NOM de société : exclut tout ETF/fonds quel que soit le ticker
 ETF_NAME_HINTS = ("etf", "etn", " fund", "index fund", "vanguard", "ishares",
                   "spdr", "proshares", "direxion", "invesco", " trust etf")
+# Méga/large-caps à exclure : trop grosses pour un squeeze micro-cap. Ortex renvoie
+# parfois un flottant FAUX pour ces noms (ex. NVO 31,9M !) → elles passaient les
+# filtres flottant/SI-$. Exclusion par ticker = fiable (ce sont des noms archi-connus).
+MEGA = {"NVO", "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "GOOG", "GOOGL", "META", "MU",
+        "AMD", "NFLX", "AVGO", "INTC", "JPM", "BAC", "WMT", "DIS", "BABA", "COIN",
+        "PLTR", "SMCI", "MSTR", "CRM", "ORCL", "ADBE", "TSM", "PYPL", "UBER", "BA",
+        "F", "T", "KO", "PFE", "XOM", "CVX", "V", "MA", "UNH", "LLY", "SHOP", "NIO",
+        "QCOM", "NKE", "PEP", "COST", "HD", "MCD", "CSCO", "ACN", "CRWD", "UI", "TD",
+        "AMAT", "PANW", "ASML", "GS", "BLK", "SPGI", "TXN", "ABT", "BX", "OXY", "MELI",
+        "C", "WFC", "MS", "IBM", "GE", "CAT", "DE", "LMT", "RTX", "NOW", "INTU",
+        "ABBV", "MRK", "TMO", "DHR", "LIN", "HON", "AMGN", "SBUX", "BKNG", "ADP", "BJ"}
 
 
 def clamp(x, lo=0.0, hi=1.0):
@@ -404,12 +419,14 @@ def main():
     if os.getenv("X_ENABLED", "1") in ("1", "true", "yes") and X_DISCOVERY > 0:
         for it in X.x_trending(limit=X_DISCOVERY):
             xtk = str(it.get("ticker", "")).upper()
-            if not xtk or xtk in universe or xtk in JUNK or xtk in ETF_BLOCK:
+            if not xtk or xtk in universe or xtk in JUNK or xtk in ETF_BLOCK or xtk in MEGA:
                 continue
             nm = it.get("company_name")
             if nm and any(h in nm.lower() for h in ETF_NAME_HINTS):
                 continue
-            universe[xtk] = {"src": "X-buzz", "mentions": None, "prev": None, "name": nm}
+            # on garde le buzz du trending -> évite un appel x_stock redondant plus tard
+            universe[xtk] = {"src": "X-buzz", "mentions": None, "prev": None, "name": nm,
+                             "x_buzz_hint": it.get("buzz_score")}
             n_x += 1
 
     # 4) SUIVI : on force dans l'univers les titres déjà détectés (persistance),
@@ -434,9 +451,13 @@ def main():
           f"C2={'oui' if want_c2 else 'non'}\n")
     # plafond par cycle : on score les plus buzzants d'abord (borne le coût Ortex)
     cand = sorted(universe.items(), key=lambda x: -(x[1].get("mentions") or 0))[:args.max_score_per_cycle]
-    # garantit que suivi + watchlist emprunt + découverte X sont toujours scorés
+    # garantit que suivi (top TRACK_MAX) + watchlist emprunt + découverte X sont scorés.
+    # Suivi plafonné aux plus « chauds » (peak_score) : borne les appels, les autres
+    # s'éteignent d'eux-mêmes (retrait après délai de calme).
+    top_tracked = sorted(tracked_prev.items(), key=lambda kv: -(kv[1].get("peak_score") or 0))[:TRACK_MAX]
     cand_tks = {t for t, _ in cand}
-    forced = set(tracked_prev) | SQUEEZE_WATCH | {t for t, v in universe.items() if v.get("src") == "X-buzz"}
+    forced = {t for t, _ in top_tracked} | SQUEEZE_WATCH \
+        | {t for t, v in universe.items() if v.get("src") == "X-buzz"}
     for tk in forced:
         if tk not in cand_tks and tk in universe:
             cand.append((tk, universe[tk]))
@@ -444,9 +465,10 @@ def main():
     print(hdr); print("-" * (len(hdr) + 6))
     results = []
     n_junk = n_bigfloat = n_delisted = 0
+    n_xstock = n_c2calls = 0   # budgets d'appels Adanos par cycle
     for tk, d in cand:
-        # filtre 1 : tickers-poubelle / mots courants / ETF
-        if tk in JUNK or tk in ETF_BLOCK:
+        # filtre 1 : tickers-poubelle / mots courants / ETF / méga-caps
+        if tk in JUNK or tk in ETF_BLOCK or tk in MEGA:
             n_junk += 1
             continue
         mentions, prev, name = d.get("mentions"), d.get("prev"), d.get("name")
@@ -475,18 +497,29 @@ def main():
         if not is_tradeable(tk):
             n_delisted += 1
             continue
-        c2 = c2_live(tk, want_c2)
+        # C2 (coordination = 3 appels Adanos) : seulement sur les titres RÉELLEMENT
+        # discutés sur Reddit (mentions >= plancher) ET dans le budget du cycle.
+        if want_c2 and (mentions or 0) >= args.min_mentions and n_c2calls < C2_MAX_CALLS:
+            c2 = c2_live(tk, True)
+            if c2 is not None:
+                n_c2calls += 1
+        else:
+            c2 = None
         c5 = c5_live(tk)
         # --- signal X/Twitter (source sociale de MÊME rang que Reddit) ---
         x_buzz = x_sent = None
         x_confirmed = []
         xs = None
         if os.getenv("X_ENABLED", "1") in ("1", "true", "yes"):
-            xs = X.x_stock(tk)
-            if xs:
-                x_buzz = xs.get("buzz_score")
-                x_sent = xs.get("sentiment_score")
-                x_confirmed = X.confirmed_in_stock(xs, CONFIRMED)
+            if n_xstock < X_STOCK_MAX:       # budget d'appels X buzz par cycle
+                xs = X.x_stock(tk)
+                n_xstock += 1
+                if xs:
+                    x_buzz = xs.get("buzz_score")
+                    x_sent = xs.get("sentiment_score")
+                    x_confirmed = X.confirmed_in_stock(xs, CONFIRMED)
+            if x_buzz is None:               # budget épuisé -> repli sur le buzz du trending
+                x_buzz = d.get("x_buzz_hint")
         # --- score social : Reddit ET X au même niveau, surprime si les deux ---
         reddit_soc, x_soc, social, coupled = social_scores(c1, c2, x_buzz)
         cross = coupled                      # 🔗 = convergence Reddit×X (surprime appliquée)
@@ -520,8 +553,9 @@ def main():
                         "already_moved": already_moved,
                         "SCCT": sc, "quadrant": q, "has_social": has_social})
         time.sleep(0.2)
-    print(f"(filtrés : {n_junk} poubelle/ETF, {n_bigfloat} float > {args.max_float_m}M, "
-          f"{n_delisted} délistés/non cotés)\n")
+    print(f"(filtrés : {n_junk} poubelle/ETF/mega, {n_bigfloat} float > {args.max_float_m}M, "
+          f"{n_delisted} délistés/non cotés · Adanos ce cycle : {n_xstock} X buzz + {n_c2calls}×3 C2 "
+          f"≈ {n_xstock + n_c2calls*3} appels)\n")
 
     results.sort(key=lambda r: r["SCCT"], reverse=True)
     # SIGNAUX = présence sociale (C1 ou C2) ET score >= seuil
