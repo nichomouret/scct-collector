@@ -3,346 +3,92 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SCCT · Social — Scanner</title>
+<title>Radar social</title>
 <style>
-  :root{
-    --bg:#0e1117; --panel:#161b22; --panel2:#1c2230; --line:#2b3340; --txt:#e6edf3; --muted:#8b949e;
-    --q1:#d29922; --q2:#2ea043; --q3:#6e7681; --q4:#388bfd; --hot:#f85149;
-  }
+  :root{--bg:#0e1117;--panel:#161b22;--line:#2b3340;--txt:#e6edf3;--muted:#8b949e;--pos:#2ea043;--neg:#f85149;--warn:#d29922}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
   header{padding:14px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   header h1{font-size:16px;margin:0;letter-spacing:.5px;font-weight:700}
   header .meta{color:var(--muted);font-size:12px}
   header .pill{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:7px 16px;cursor:pointer;color:var(--txt);font-size:13px}
-  .wrap{padding:18px 22px;max-width:1100px;margin:0 auto}
-
-  /* --- BANDEAU VERDICT --- */
-  .verdict{border-radius:12px;padding:18px 22px;margin-bottom:16px;display:flex;align-items:center;gap:16px}
-  .verdict .dot{font-size:30px;line-height:1}
-  .verdict .vtxt{flex:1}
-  .verdict .vtitle{font-size:19px;font-weight:700;margin:0 0 2px}
-  .verdict .vsub{font-size:13px;opacity:.85;margin:0}
-  .v-green{background:rgba(46,160,67,.12);border:1px solid var(--q2)}
-  .v-green .vtitle{color:var(--q2)}
-  .v-orange{background:rgba(210,153,34,.12);border:1px solid var(--q1)}
-  .v-orange .vtitle{color:var(--q1)}
-  .v-red{background:rgba(248,81,73,.12);border:1px solid var(--hot)}
-  .v-red .vtitle{color:var(--hot)}
-
-  /* --- ANALYSE --- */
-  .analysis{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:18px}
-  .analysis h3{margin:0 0 10px;font-size:12px;letter-spacing:.5px;color:var(--q4);text-transform:uppercase}
-  .analysis .verdline{font-size:14.5px;font-weight:600;margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-  .analysis ul{margin:0;padding-left:4px;list-style:none}
-  .analysis li{position:relative;padding:4px 0 4px 20px;color:var(--txt);font-size:13.5px}
-  .analysis li::before{content:"›";position:absolute;left:4px;color:var(--q4);font-weight:700}
-
-  /* --- TABLE --- */
-  .sec-title{font-size:12px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:0 0 8px}
-  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:visible}
+  .wrap{padding:18px 22px;max-width:1050px;margin:0 auto}
+  .note{background:rgba(210,153,34,.10);border:1px solid var(--warn);border-radius:10px;padding:14px 18px;margin-bottom:18px;font-size:13.5px;line-height:1.55}
+  .note b{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
   th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
-  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;position:relative}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
   tr:last-child td{border-bottom:none}
-  tr.hot{background:rgba(46,160,67,.06)}
-  tr.warm{background:rgba(210,153,34,.05)}
   td.tk{font-weight:700;font-size:15px}
-  .tkname{font-size:11px;color:var(--muted);font-weight:400;margin-top:1px;max-width:160px;white-space:normal}
-  .scorewrap{min-width:90px}
-  .score{font-weight:700;font-size:15px}
-  .bar{height:5px;border-radius:3px;background:#30363d;margin-top:4px;overflow:hidden}
-  .bar>span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--hot),var(--q1),var(--q2))}
-  .q{font-size:11px;padding:3px 9px;border-radius:10px;color:#0e1117;font-weight:700;display:inline-block}
-  .qQ1{background:var(--q1)} .qQ2{background:var(--q2)} .qQ3{background:var(--q3);color:#fff} .qQ4{background:var(--q4)}
+  .tkname{font-size:11px;color:var(--muted);font-weight:400;margin-top:1px;max-width:170px;white-space:normal}
   .src{font-size:11px;color:var(--muted)}
-  .i{display:inline-block;width:15px;height:15px;line-height:15px;text-align:center;border-radius:50%;
-     border:1px solid var(--muted);color:var(--muted);font-size:10px;font-style:normal;margin-left:5px;cursor:help;position:relative}
-  .i:hover{background:var(--q4);color:#fff;border-color:var(--q4)}
-  .i:hover::after{content:attr(data-tip);position:absolute;left:50%;top:22px;transform:translateX(-50%);
-     width:230px;background:#0b0e14;color:var(--txt);border:1px solid var(--line);border-radius:8px;
-     padding:9px 11px;font-size:11.5px;font-weight:400;line-height:1.45;letter-spacing:0;text-transform:none;
-     white-space:normal;z-index:100;box-shadow:0 6px 20px rgba(0,0,0,.55)}
-  th:nth-last-child(-n+2) .i:hover::after{left:auto;right:0;transform:none}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0 8px}
-  .cell{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-height:74px}
-  .cell h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
-  .cell .chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:3px 9px;margin:2px;font-size:13px;font-weight:600}
-  .cQ2 h4{color:var(--q2)} .cQ1 h4{color:var(--q1)} .cQ4 h4{color:var(--q4)} .cQ3 h4{color:var(--muted)}
-  .small{color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5}
-  .disc{color:var(--muted);font-size:11px;border-left:3px solid var(--hot);padding-left:10px;margin:16px 0 0}
-  .legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 2px 0;padding:12px 14px;
-     background:var(--panel);border:1px solid var(--line);border-radius:10px}
-  .legend .lg{font-size:12px;color:var(--muted);line-height:1.5;flex:1 1 240px}
-  .legend .lg b{color:var(--txt);font-weight:700}
+  .pos{color:var(--pos)} .neg{color:var(--neg)}
+  .bar{display:inline-block;height:6px;border-radius:3px;background:#30363d;width:60px;vertical-align:middle;overflow:hidden}
+  .bar>span{display:block;height:100%;background:var(--muted)}
+  .small{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.6}
+  #empty{padding:26px;text-align:center;color:var(--muted)}
 </style>
 </head>
 <body>
 <header>
-  <h1>SCCT · SOCIAL</h1>
+  <h1>📡 RADAR SOCIAL</h1>
   <span class="meta" id="meta">chargement…</span>
   <button class="pill" onclick="load()">↻ Rafraîchir</button>
 </header>
 <div class="wrap">
 
-  <div id="verdict" class="verdict v-green">
-    <div class="dot" id="vdot">🟢</div>
-    <div class="vtxt"><p class="vtitle" id="vtitle">…</p><p class="vsub" id="vsub"></p></div>
+  <div class="note">
+    <b>ℹ️ Information, pas un signal de trading.</b> Ceci liste simplement les titres les plus discutés
+    sur Reddit et X en ce moment, avec leur sentiment. Un backtest a montré que ce buzz
+    <b>ne prédit pas</b> les mouvements de prix (il les suit) — à lire comme du contexte, jamais comme une reco d'achat.
   </div>
 
-  <div id="gemsSec" style="display:none">
-    <p class="sec-title" style="color:var(--q2)">⭐ Pépites — la sélection resserrée<i class="i" data-tip="La crème : titres FRAIS (pas encore partis, aucun ⚠), avec carburant réel (C4 élevé) ET présence sociale, score élevé. Q2 (convergence) en tête. C'est la shortlist à examiner en priorité — le reste est en dessous.">i</i></p>
-    <table>
-      <thead><tr>
-        <th>Titre</th><th>D'où</th><th>Social</th><th>Carburant</th><th>Short %</th>
-        <th>Float (M)</th><th>Prix</th><th>Score</th><th>Type</th>
-      </tr></thead>
-      <tbody id="gemsRows"></tbody>
-    </table>
-    <p class="small">Pépite = frais + chargé + social. Ça ne veut pas dire « acheter » — vérif manuelle obligatoire (contexte, catalyseur, risque).</p>
-  </div>
-
-  <div class="analysis">
-    <h3>🤖 Analyse Claude</h3>
-    <p class="verdline" id="verdline"></p>
-    <ul id="analysisList"></ul>
-  </div>
-
-  <p class="sec-title">Candidats détectés (triés par score)</p>
   <table id="tbl">
     <thead><tr>
-      <th>Titre</th>
-      <th>D'où<i class="i" data-tip="watchlist = ta liste micro-cap ; découverte = remonté du buzz Reddit (ApeWisdom)">i</i></th>
-      <th>Volume<i class="i" data-tip="C1 — flambée de mentions vs la veille (0–1). Pas de flambée = pas de signal.">i</i></th>
-      <th>Coordin.<i class="i" data-tip="C2 — signature de coordination (0–1) : posts groupés, peu d'auteurs, multi-subreddits, textes similaires. Le cœur du modèle : sépare une vraie manip d'un buzz spontané.">i</i></th>
-      <th>Carburant<i class="i" data-tip="C4 — pression de float (0–1) : float réduit + short interest élevé = potentiel de squeeze. Gros float = ~0.">i</i></th>
-      <th>Catalys.<i class="i" data-tip="C5 — catalyseur daté (0/1) : 8-K ou earnings près de l'événement. Sert à placer le quadrant.">i</i></th>
-      <th>Float (M)<i class="i" data-tip="Free float en millions d'actions. Plus c'est petit, plus c'est squeezable.">i</i></th>
-      <th>Short %<i class="i" data-tip="Short interest en % du float. Élevé = beaucoup de vendeurs à découvert à racheter.">i</i></th>
-      <th>X buzz<i class="i" data-tip="Buzz X/Twitter (0–100, Adanos) — source sociale de MÊME rang que Reddit (peut déclencher seul). 🔗 = Reddit ET X présents = surprime de convergence sur le score. ✅ = compte X à edge prouvé actif. Survole le Score pour voir le détail Reddit/X.">i</i></th>
-      <th>Score<i class="i" data-tip="Score global 0–100. Au-delà de ~60 et en Q2 = à regarder sérieusement.">i</i></th>
-      <th>Type<i class="i" data-tip="Q2 convergence (idéal) · Q1 pump pur (risqué) · Q3 bruit · Q4 fondamental (hors scope).">i</i></th>
+      <th>Titre</th><th>D'où</th><th>Mentions Reddit</th><th>Buzz X</th>
+      <th>Sentiment X</th><th>Short %</th><th>Float (M)</th><th>Prix</th><th>Var 5j</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
-  <div id="emptymsg"></div>
+  <div id="empty"></div>
 
-  <div class="legend">
-    <span class="lg"><b>⚡ Ignition précoce</b> — le buzz s'accélère <i>avant</i> que le prix ait bougé : entrée potentiellement en amont, plus tôt mais plus risquée.</span>
-    <span class="lg"><b style="color:var(--q1)">⚠ Déjà parti</b> — le titre a déjà couru (&gt;20 % sur 5 j) : risque de chasing, ce n'est pas une entrée fraîche.</span>
-    <span class="lg"><b style="color:var(--q2)">✅ Compte confirmé</b> — un compte X au track-record prouvé (bat le hasard) est actif sur le titre : élément de confirmation.</span>
-    <span class="lg"><b>🔗 Cross-plateforme</b> — buzz sur Reddit ET X simultanément : surprime de convergence ajoutée au score social.</span>
-    <span class="lg"><b style="color:var(--q2)">🔥 Actif</b> — titre en suivi qui bouge encore (var. notable / toujours signal).</span>
-    <span class="lg"><b style="color:var(--q1)">🌡️ Refroidit</b> — titre en suivi qui se calme : sortira bientôt du suivi.</span>
-    <span class="lg"><b style="color:var(--hot)">🔫 Chargé</b> — amorce structurelle : carburant (short interest / float) extrême, mais squeeze pas encore allumé socialement.</span>
-  </div>
-
-  <div id="structSec" style="margin-top:24px;display:none">
-    <p class="sec-title">⚙️ Amorce structurelle<i class="i" data-tip="Watchlist « pression d'emprunt » (squeeze_watch.txt) : titres à fort short interest / float serré, surveillés côté CARBURANT (C4) même SANS buzz social. 🔫 = fusil chargé (C4 élevé). Une amorce structurelle n'est pas un squeeze tant que l'étincelle sociale (C1/C2) ne prend pas — surveille, ne te précipite pas.">i</i></p>
-    <table>
-      <thead><tr>
-        <th>Titre</th><th>État</th><th>Carburant</th><th>Short %</th><th>Float (M)</th>
-        <th>Prix</th><th>Var. 5j</th><th>Étincelle ?</th>
-      </tr></thead>
-      <tbody id="structRows"></tbody>
-    </table>
-    <p class="small">Carburant sans étincelle = fusil chargé, pas un tir. SCCT reste un détecteur de squeeze social ; cette section est un radar emprunt complémentaire. Alimente <code>squeeze_watch.txt</code> depuis ton outil Ortex.</p>
-  </div>
-
-  <div id="watchSec" style="margin-top:24px;display:none">
-    <p class="sec-title">👀 Sociétés en veille<i class="i" data-tip="Titres encore cotés et réellement discutés (mentions ≥ seuil) mais qui ne sont PAS un signal : score sous le seuil, ou pas (encore) de coordination sociale confirmée. À garder à l'œil — ce n'est pas une reco.">i</i></p>
-    <table>
-      <thead><tr>
-        <th>Titre</th><th>D'où</th><th>Mentions</th><th>Volume</th><th>Coordin.</th>
-        <th>Carburant</th><th>Float (M)</th><th>Short %</th><th>Score</th><th>Type</th>
-      </tr></thead>
-      <tbody id="watchRows"></tbody>
-    </table>
-    <p class="small">Veille = activité sociale présente mais sous le seuil de signal, ou structure (float/catalyseur) sans coordination confirmée. Une accélération des mentions + coordination ferait basculer un titre vers les signaux.</p>
-  </div>
-
-  <div class="grid">
-    <div class="cell cQ2"><h4>🟢 Q2 — Convergence (idéal)</h4><div id="q2"></div></div>
-    <div class="cell cQ1"><h4>🟡 Q1 — Pump pur (risqué)</h4><div id="q1"></div></div>
-    <div class="cell cQ4"><h4>🔵 Q4 — Fondamental (hors scope)</h4><div id="q4"></div></div>
-    <div class="cell cQ3"><h4>⚪ Q3 — Bruit (à ignorer)</h4><div id="q3"></div></div>
-  </div>
-
-  <p class="small">Score = Social·0,65 + Carburant·0,25 (Catalyseur → quadrant). Social = Reddit (coordination C2 + volume C1) ET X buzz au même rang, avec surprime de convergence si les deux. Sources : ApeWisdom + X-trending (découverte) · Adanos (coordination Reddit + buzz X) · Ortex (float/short) · SEC (catalyseur).</p>
-  <p class="disc">Outil de DÉTECTION uniquement — pas un conseil financier. Vérifie chaque candidat à la main (float, short interest, catalyseur, contexte) avant tout trade. Le score n'est pas une garantie.</p>
+  <p class="small">Sources : ApeWisdom (mentions Reddit) · Adanos (buzz/sentiment X) · Ortex (float/short) · TwelveData (prix).
+  Radar descriptif — aucun score, aucune prédiction.</p>
 </div>
 
 <script>
-const fmt = v => (v===null||v===undefined||v==="") ? "–" : (typeof v==="number" ? v.toFixed(2) : v);
-function qClass(q){ return q&&q.includes("Q1")?"qQ1":q&&q.includes("Q2")?"qQ2":q&&q.includes("Q4")?"qQ4":"qQ3"; }
-function qShort(q){ return (q||"").split(" ")[0]; }
-function confBadge(r){ return (r.x_confirmed&&r.x_confirmed.length)
-  ? ` <span title="Compte X à edge confirmé actif : @${r.x_confirmed.join(', @')}" style="cursor:help">✅</span>` : ""; }
-function socialTitle(r){
-  if(r.social==null) return '';
-  return `Social ${Math.round(r.social*100)}/100 — Reddit ${Math.round((r.reddit_soc||0)*100)} · X ${Math.round((r.x_soc||0)*100)}${r.cross?' · 🔗 couplé (surprime de convergence)':''}`;
-}
-function ignBadge(r){
-  if(r.already_moved){
-    const parts=[];
-    if(r.chg_5d!=null) parts.push('1s '+(r.chg_5d>=0?'+':'')+Math.round(r.chg_5d*100)+'%');
-    if(r.chg_21d!=null) parts.push('1m '+(r.chg_21d>=0?'+':'')+Math.round(r.chg_21d*100)+'%');
-    if(r.chg_63d!=null) parts.push('3m '+(r.chg_63d>=0?'+':'')+Math.round(r.chg_63d*100)+'%');
-    return ` <span title="Déjà parti — ${parts.join(' · ')}. Risque de chasing, pas une entrée fraîche." style="cursor:help;color:var(--q1)">⚠</span>`;
-  }
-  if(r.ignition!=null&&r.ignition>=0.5) return ` <span title="Ignition précoce : buzz en accélération alors que le prix n'a PAS encore bougé (semaine/mois/3 mois). Entrée en amont — plus tôt, mais plus risqué." style="cursor:help">⚡</span>`;
-  return "";
-}
-
-function setVerdict(signals, watch, gems){
-  const el=document.getElementById('verdict'), dot=document.getElementById('vdot'),
-        t=document.getElementById('vtitle'), s=document.getElementById('vsub');
-  gems=gems||[];
-  const igni=(watch||[]).concat(signals).filter(r=>r.ignition!=null&&r.ignition>=0.5&&!r.already_moved)
-        .sort((a,b)=>b.ignition-a.ignition);
-  const actionable=signals.filter(r=>r.quadrant&&(r.quadrant.includes('Q1')||r.quadrant.includes('Q2')));
-  const q2strong=actionable.filter(r=>r.quadrant.includes('Q2')&&r.SCCT>=60).sort((a,b)=>b.SCCT-a.SCCT);
-  const warm=actionable.filter(r=>r.SCCT>=55).sort((a,b)=>b.SCCT-a.SCCT);
-  const confirmed=signals.filter(r=>r.x_confirmed&&r.x_confirmed.length).sort((a,b)=>b.SCCT-a.SCCT);
-  el.className="verdict v-green";
-  if(gems.length){
-    el.className="verdict v-red"; dot.textContent="🔴";
-    const g=gems[0], c=gems.find(r=>r.x_confirmed&&r.x_confirmed.length);
-    t.textContent="⭐ PÉPITE — "+g.ticker+" (score "+g.SCCT+", "+qShort(g.quadrant)+", frais)";
-    s.textContent=(gems.length>1?gems.length+" pépites fraîches. ":"")
-      +(c?"✅ Compte X confirmé actif. ":"")
-      +"Frais (pas encore parti) + carburant + social. Vérif manuelle obligatoire.";
-  } else if(q2strong.length){
-    el.className="verdict v-orange"; dot.textContent="🟠";
-    t.textContent="Convergence Q2 — "+q2strong[0].ticker+" (score "+q2strong[0].SCCT+")";
-    s.textContent="Convergence social + carburant, mais déjà en mouvement (pas une entrée fraîche). Vérif manuelle.";
-  } else if(confirmed.length){
-    el.className="verdict v-orange"; dot.textContent="🟠";
-    t.textContent="À surveiller — "+confirmed[0].ticker+" (✅ compte X confirmé actif)";
-    s.textContent="Un compte X à edge prouvé (@"+confirmed[0].x_confirmed.join(', @')+") est actif sur ce titre. Élément de confirmation — vérifie le contexte avant tout trade.";
-  } else if(warm.length){
-    el.className="verdict v-orange"; dot.textContent="🟠";
-    t.textContent="À surveiller — "+warm[0].ticker+" (score "+warm[0].SCCT+", "+qShort(warm[0].quadrant)+")";
-    s.textContent="Signal partiel, pas de convergence idéale. Garder à l'œil, ne pas se précipiter.";
-  } else if(igni.length){
-    el.className="verdict v-orange"; dot.textContent="🟠";
-    t.textContent="⚡ Ignition précoce — "+igni[0].ticker;
-    s.textContent="Le buzz s'accélère avant un gros mouvement de prix (signal en amont). Plus tôt, donc plus risqué — surveille de près, vérif manuelle.";
-  } else {
-    dot.textContent="🟢";
-    t.textContent="Rien à signaler";
-    s.textContent="Aucun squeeze social en cours. C'est l'état normal en période calme — le système veille.";
-  }
-}
-
-function renderAnalysis(txt){
-  const vl=document.getElementById('verdline'), ul=document.getElementById('analysisList');
-  ul.innerHTML=""; vl.textContent="";
-  if(!txt){ vl.textContent="—"; return; }
-  // nettoie le markdown résiduel et découpe en lignes
-  const clean=txt.replace(/\*\*/g,"").replace(/^#+\s*/gm,"");
-  const lines=clean.split(/\n|(?=- )|(?=• )/).map(l=>l.trim()).filter(Boolean);
-  lines.forEach(l=>{
-    if(/^verdict\s*:/i.test(l)){ vl.textContent=l.replace(/^verdict\s*:\s*/i,""); }
-    else if(/^[-•]\s*/.test(l)){ const li=document.createElement('li'); li.textContent=l.replace(/^[-•]\s*/,""); ul.appendChild(li); }
-    else if(l.length>3){ const li=document.createElement('li'); li.textContent=l; ul.appendChild(li); }
-  });
-  if(!vl.textContent && ul.children.length){ vl.textContent=ul.firstChild.textContent; ul.removeChild(ul.firstChild); }
-}
-
-async function load(){
-  let data;
-  try{ data=await (await fetch('scan_latest.json?'+Date.now())).json(); }
-  catch(e){ document.getElementById('meta').textContent="scan en cours de génération…"; return; }
-  const sig=data.signals||[];
-  document.getElementById('meta').textContent =
-    `${sig.length} candidats · scan du ${data.generated_utc?new Date(data.generated_utc).toLocaleString('fr-FR'):'—'}`;
-  setVerdict(sig, data.watch||[], data.gems||[]);
-  renderAnalysis(data.analysis);
-
-  // --- ⭐ Pépites (crème : frais + chargé + social) ---
-  const gems=data.gems||[];
-  const gsec=document.getElementById('gemsSec'), grows=document.getElementById('gemsRows');
-  grows.innerHTML="";
-  if(gems.length){
-    gsec.style.display="";
-    gems.forEach(r=>{
-      const tr=document.createElement('tr'); tr.className="hot";
-      tr.innerHTML=`<td class="tk">⭐ ${r.ticker}${ignBadge(r)}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
-        <td class="src">${r.src||''}</td>
-        <td title="${socialTitle(r)}"><b>${r.social!=null?Math.round(r.social*100):'–'}</b></td>
-        <td>${fmt(r.C4)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
-        <td>${fmt(r.float_m)}</td><td>${r.last_price!=null?'$'+r.last_price.toFixed(2):'–'}</td>
-        <td class="scorewrap"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
-        <td><span class="q ${qClass(r.quadrant)}">${qShort(r.quadrant)}</span></td>`;
-      grows.appendChild(tr);
-    });
-  } else { gsec.style.display="none"; }
-
-  const rows=document.getElementById('rows'); rows.innerHTML="";
-  const buckets={q1:[],q2:[],q3:[],q4:[]};
-  sig.forEach(r=>{
-    const q=qShort(r.quadrant);
-    const cls = q==="Q2"?"hot":q==="Q1"?"warm":"";
-    const tr=document.createElement('tr'); if(cls) tr.className=cls;
-    tr.innerHTML=`<td class="tk">${r.ticker}${ignBadge(r)}<div class="tkname">${r.name||''}</div></td><td class="src">${r.src||''}</td>
-      <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td><td>${fmt(r.C5)}</td>
-      <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
-      <td>${r.x_buzz!=null?Math.round(r.x_buzz):'–'}${r.cross?' 🔗':''}${confBadge(r)}</td>
-      <td class="scorewrap" title="${socialTitle(r)}"><span class="score">${r.SCCT}</span><div class="bar"><span style="width:${Math.min(100,r.SCCT)}%"></span></div></td>
-      <td><span class="q ${qClass(r.quadrant)}">${q}</span></td>`;
-    rows.appendChild(tr);
-    const k=q==="Q1"?"q1":q==="Q2"?"q2":q==="Q4"?"q4":"q3"; buckets[k].push(r.ticker);
-  });
-  document.getElementById('emptymsg').innerHTML = sig.length? "" :
-    '<div style="padding:24px;text-align:center;color:var(--muted)">Aucun candidat au-dessus du seuil. Période calme — comportement normal.</div>';
-
-  // --- Amorce structurelle (watchlist emprunt, carburant sans étincelle) ---
-  const struct=data.structural||[];
-  const ssec=document.getElementById('structSec'), srows=document.getElementById('structRows');
-  srows.innerHTML="";
-  if(struct.length){
-    ssec.style.display="";
-    struct.forEach(r=>{
-      const etat = r.loaded
-        ? '<span style="color:var(--hot)">🔫 chargé</span>'
-        : '<span class="src">surveillance</span>';
-      const spark = (r.has_social||(r.C1>0)||(r.C2>0))
-        ? '<span style="color:var(--q2)">⚡ oui</span>'
-        : '<span class="src">— pas encore</span>';
+const fmt=v=>(v===null||v===undefined||v==="")?"–":v;
+const pctS=v=>v==null?"–":`<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${Math.round(v*100)}%</span>`;
+function load(){
+  fetch('scan_latest.json?'+Date.now()).then(r=>r.json()).then(data=>{
+    // radar = tout ce qui a une activité sociale, trié par mentions Reddit puis buzz X
+    let all=(data.all||[]).filter(r=>(r.mentions&&r.mentions>0)||(r.x_buzz&&r.x_buzz>0));
+    all.sort((a,b)=>((b.mentions||0)-(a.mentions||0))||((b.x_buzz||0)-(a.x_buzz||0)));
+    all=all.slice(0,50);
+    document.getElementById('meta').textContent=
+      `${all.length} titres discutés · ${data.generated_utc?new Date(data.generated_utc).toLocaleString('fr-FR'):'—'}`;
+    const rows=document.getElementById('rows'); rows.innerHTML="";
+    all.forEach(r=>{
+      const sent=r.x_sent;
+      const sentTxt=sent==null?'–':`<span class="${sent>=0?'pos':'neg'}">${sent>=0?'+':''}${sent.toFixed(2)}</span>`;
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td class="tk">${r.ticker}${ignBadge(r)}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
-        <td>${etat}</td><td><b>${fmt(r.C4)}</b></td>
+      tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td>
+        <td class="src">${r.src||''}</td>
+        <td>${fmt(r.mentions)}</td>
+        <td>${r.x_buzz!=null?`${Math.round(r.x_buzz)} <span class="bar"><span style="width:${Math.min(100,r.x_buzz)}%"></span></span>`:'–'}</td>
+        <td>${sentTxt}</td>
         <td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
         <td>${fmt(r.float_m)}</td>
         <td>${r.last_price!=null?'$'+r.last_price.toFixed(2):'–'}</td>
-        <td>${r.chg_5d!=null?(r.chg_5d>=0?'+':'')+Math.round(r.chg_5d*100)+'%':'–'}</td>
-        <td>${spark}</td>`;
-      srows.appendChild(tr);
+        <td>${pctS(r.chg_5d)}</td>`;
+      rows.appendChild(tr);
     });
-  } else { ssec.style.display="none"; }
-
-  // --- Sociétés en veille (discutées mais pas un signal) ---
-  const watch=data.watch||[];
-  const wsec=document.getElementById('watchSec'), wrows=document.getElementById('watchRows');
-  wrows.innerHTML="";
-  if(watch.length){
-    wsec.style.display="";
-    watch.forEach(r=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td class="tk">${r.ticker}${ignBadge(r)}${confBadge(r)}<div class="tkname">${r.name||''}</div></td>
-        <td class="src">${r.src||''}</td><td>${r.mentions!=null?r.mentions:'–'}</td>
-        <td>${fmt(r.C1)}</td><td>${fmt(r.C2)}</td><td>${fmt(r.C4)}</td>
-        <td>${fmt(r.float_m)}</td><td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
-        <td class="scorewrap"><span class="score">${r.SCCT}</span></td>
-        <td><span class="q ${qClass(r.quadrant)}">${qShort(r.quadrant)}</span></td>`;
-      wrows.appendChild(tr);
-    });
-  } else { wsec.style.display="none"; }
-
-  for(const k of ['q1','q2','q3','q4'])
-    document.getElementById(k).innerHTML = buckets[k].length? buckets[k].map(t=>`<span class="chip">${t}</span>`).join('') : '<span class="src">—</span>';
+    document.getElementById('empty').innerHTML=all.length?"":
+      '<div style="padding:26px;text-align:center;color:var(--muted)">Rien de particulièrement discuté en ce moment.</div>';
+  }).catch(()=>{document.getElementById('meta').textContent="scan en cours de génération…";});
 }
 load();
+setInterval(load, 180000); // rafraîchit toutes les 3 min
 </script>
 </body>
 </html>
