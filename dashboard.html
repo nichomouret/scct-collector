@@ -5,26 +5,41 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Radar social</title>
 <style>
-  :root{--bg:#0e1117;--panel:#161b22;--line:#2b3340;--txt:#e6edf3;--muted:#8b949e;--pos:#2ea043;--neg:#f85149;--warn:#d29922}
+  :root{--bg:#0e1117;--panel:#161b22;--line:#2b3340;--txt:#e6edf3;--muted:#8b949e;--pos:#2ea043;--neg:#f85149;--warn:#d29922;--acc:#388bfd}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
   header{padding:14px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   header h1{font-size:16px;margin:0;letter-spacing:.5px;font-weight:700}
   header .meta{color:var(--muted);font-size:12px}
   header .pill{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:7px 16px;cursor:pointer;color:var(--txt);font-size:13px}
-  .wrap{padding:18px 22px;max-width:1050px;margin:0 auto}
-  .note{background:rgba(210,153,34,.10);border:1px solid var(--warn);border-radius:10px;padding:14px 18px;margin-bottom:18px;font-size:13.5px;line-height:1.55}
+  .wrap{padding:18px 22px;max-width:1080px;margin:0 auto}
+  .note{background:rgba(210,153,34,.10);border:1px solid var(--warn);border-radius:10px;padding:13px 17px;margin-bottom:16px;font-size:13px;line-height:1.55}
   .note b{color:var(--warn)}
-  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .analysis{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:18px}
+  .analysis h3{margin:0 0 10px;font-size:12px;letter-spacing:.5px;color:var(--acc);text-transform:uppercase}
+  .analysis .verdline{font-size:14px;font-weight:600;margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .analysis ul{margin:0;padding-left:4px;list-style:none}
+  .analysis li{position:relative;padding:4px 0 4px 20px;font-size:13.5px}
+  .analysis li::before{content:"›";position:absolute;left:4px;color:var(--acc);font-weight:700}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:visible}
   th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
-  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;cursor:pointer;position:relative;user-select:none}
+  th:hover{color:var(--txt)}
+  th .arw{color:var(--acc);font-size:10px}
   tr:last-child td{border-bottom:none}
   td.tk{font-weight:700;font-size:15px}
   .tkname{font-size:11px;color:var(--muted);font-weight:400;margin-top:1px;max-width:170px;white-space:normal}
   .src{font-size:11px;color:var(--muted)}
   .pos{color:var(--pos)} .neg{color:var(--neg)}
-  .bar{display:inline-block;height:6px;border-radius:3px;background:#30363d;width:60px;vertical-align:middle;overflow:hidden}
+  .bar{display:inline-block;height:6px;border-radius:3px;background:#30363d;width:52px;vertical-align:middle;overflow:hidden;margin-left:6px}
   .bar>span{display:block;height:100%;background:var(--muted)}
+  .i{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;border:1px solid var(--muted);
+     color:var(--muted);font-size:9px;font-style:normal;margin-left:5px;cursor:help}
+  .i:hover{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .i:hover::after{content:attr(data-tip);position:absolute;left:0;top:22px;width:220px;background:#0b0e14;color:var(--txt);
+     border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:11.5px;font-weight:400;line-height:1.45;
+     letter-spacing:0;text-transform:none;white-space:normal;z-index:100;box-shadow:0 6px 20px rgba(0,0,0,.55)}
+  th:nth-last-child(-n+2) .i:hover::after{left:auto;right:0}
   .small{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.6}
   #empty{padding:26px;text-align:center;color:var(--muted)}
 </style>
@@ -38,57 +53,93 @@
 <div class="wrap">
 
   <div class="note">
-    <b>ℹ️ Information, pas un signal de trading.</b> Ceci liste simplement les titres les plus discutés
-    sur Reddit et X en ce moment, avec leur sentiment. Un backtest a montré que ce buzz
-    <b>ne prédit pas</b> les mouvements de prix (il les suit) — à lire comme du contexte, jamais comme une reco d'achat.
+    <b>ℹ️ Information, pas un signal de trading.</b> Les titres les plus discutés sur Reddit et X en ce moment, avec sentiment.
+    Un backtest a montré que ce buzz <b>ne prédit pas</b> les mouvements de prix (il les suit) — contexte, jamais reco d'achat.
   </div>
 
-  <table id="tbl">
-    <thead><tr>
-      <th>Titre</th><th>D'où</th><th>Mentions Reddit</th><th>Buzz X</th>
-      <th>Sentiment X</th><th>Short %</th><th>Float (M)</th><th>Prix</th><th>Var 5j</th>
-    </tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <div class="analysis">
+    <h3>🤖 Analyse Claude</h3>
+    <p class="verdline" id="verdline"></p>
+    <ul id="analysisList"></ul>
+  </div>
+
+  <table id="tbl"><thead><tr id="head"></tr></thead><tbody id="rows"></tbody></table>
   <div id="empty"></div>
 
-  <p class="small">Sources : ApeWisdom (mentions Reddit) · Adanos (buzz/sentiment X) · Ortex (float/short) · TwelveData (prix).
-  Radar descriptif — aucun score, aucune prédiction.</p>
+  <p class="small">Clique sur un en-tête pour trier (↑/↓). Sources : ApeWisdom (mentions Reddit) · Adanos (buzz/sentiment X) · Ortex (float/short) · TwelveData (prix). Radar descriptif — aucun score, aucune prédiction.</p>
 </div>
 
 <script>
-const fmt=v=>(v===null||v===undefined||v==="")?"–":v;
-const pctS=v=>v==null?"–":`<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${Math.round(v*100)}%</span>`;
+const COLS = [
+  {key:"ticker", label:"Titre", type:"txt", tip:"Symbole et nom de la société."},
+  {key:"src", label:"D'où", type:"txt", tip:"Origine : watchlist (ta liste), découverte (buzz Reddit), X-buzz (buzz X), suivi/structurel."},
+  {key:"mentions", label:"Mentions Reddit", type:"num", tip:"Nombre de posts/commentaires Reddit mentionnant le titre (ApeWisdom) — attention Reddit du moment."},
+  {key:"x_buzz", label:"Buzz X", type:"num", tip:"Intensité du buzz sur X/Twitter (0–100, Adanos) — attention du moment sur X."},
+  {key:"x_sent", label:"Sentiment X", type:"num", tip:"Sentiment moyen des messages X : -1 très baissier à +1 très haussier."},
+  {key:"short_int", label:"Short %", type:"num", tip:"Short interest en % du float (Ortex). Élevé = beaucoup de vendeurs à découvert. Descriptif, pas prédictif."},
+  {key:"float_m", label:"Float (M)", type:"num", tip:"Free float en millions d'actions. Petit = plus volatil (dans les deux sens)."},
+  {key:"last_price", label:"Prix", type:"num", tip:"Dernier cours de clôture."},
+  {key:"chg_5d", label:"Var 5j", type:"num", tip:"Variation du cours sur les 5 derniers jours de bourse."},
+];
+let DATA=[], sortKey="mentions", sortDir=-1;
+
+function renderAnalysis(txt){
+  const vl=document.getElementById('verdline'), ul=document.getElementById('analysisList');
+  ul.innerHTML=""; vl.textContent="";
+  if(!txt){ vl.textContent="—"; return; }
+  const clean=txt.replace(/\*\*/g,"").replace(/^#+\s*/gm,"");
+  clean.split(/\n|(?=- )|(?=• )/).map(l=>l.trim()).filter(Boolean).forEach(l=>{
+    if(/^verdict\s*:/i.test(l)) vl.textContent=l.replace(/^verdict\s*:\s*/i,"");
+    else if(/^[-•]\s*/.test(l)){ const li=document.createElement('li'); li.textContent=l.replace(/^[-•]\s*/,""); ul.appendChild(li); }
+    else if(l.length>3){ const li=document.createElement('li'); li.textContent=l; ul.appendChild(li); }
+  });
+  if(!vl.textContent && ul.children.length){ vl.textContent=ul.firstChild.textContent; ul.removeChild(ul.firstChild); }
+}
+
+function val(r,k){ return k==="short_int" ? (r.short_int!=null?r.short_int*100:null) : r[k]; }
+function cell(r,c){
+  const v=val(r,c.key);
+  if(c.key==="ticker") return `<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td>`;
+  if(c.key==="src") return `<td class="src">${r.src||''}</td>`;
+  if(v==null||v==="") return `<td>–</td>`;
+  if(c.key==="x_buzz") return `<td>${Math.round(v)}<span class="bar"><span style="width:${Math.min(100,v)}%"></span></span></td>`;
+  if(c.key==="x_sent") return `<td class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(2)}</td>`;
+  if(c.key==="short_int") return `<td>${v.toFixed(1)}%</td>`;
+  if(c.key==="chg_5d") return `<td class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${Math.round(v*100)}%</td>`;
+  if(c.key==="last_price") return `<td>$${v.toFixed(2)}</td>`;
+  return `<td>${v}</td>`;
+}
+
+function renderHead(){
+  document.getElementById('head').innerHTML = COLS.map(c=>{
+    const arw = sortKey===c.key ? `<span class="arw">${sortDir<0?'↓':'↑'}</span>` : '';
+    return `<th onclick="sortBy('${c.key}')">${c.label} ${arw}<i class="i" data-tip="${c.tip}">i</i></th>`;
+  }).join('');
+}
+function renderRows(){
+  const c=COLS.find(x=>x.key===sortKey);
+  const rows=[...DATA].sort((a,b)=>{
+    let x=val(a,sortKey), y=val(b,sortKey);
+    if(c.type==="num"){ x=(x==null?-1e18:x); y=(y==null?-1e18:y); return (x-y)*sortDir; }
+    x=(x||"").toString(); y=(y||"").toString(); return x.localeCompare(y)*sortDir;
+  });
+  document.getElementById('rows').innerHTML = rows.map(r=>"<tr>"+COLS.map(col=>cell(r,col)).join('')+"</tr>").join('');
+  document.getElementById('empty').innerHTML = rows.length?"":
+    '<div style="padding:26px;text-align:center;color:var(--muted)">Rien de particulièrement discuté en ce moment.</div>';
+}
+function sortBy(k){ if(sortKey===k) sortDir*=-1; else { sortKey=k; sortDir=(k==="ticker"||k==="src")?1:-1; } renderHead(); renderRows(); }
+
 function load(){
   fetch('scan_latest.json?'+Date.now()).then(r=>r.json()).then(data=>{
-    // radar = tout ce qui a une activité sociale, trié par mentions Reddit puis buzz X
-    let all=(data.all||[]).filter(r=>(r.mentions&&r.mentions>0)||(r.x_buzz&&r.x_buzz>0));
-    all.sort((a,b)=>((b.mentions||0)-(a.mentions||0))||((b.x_buzz||0)-(a.x_buzz||0)));
-    all=all.slice(0,50);
+    DATA=(data.all||[]).filter(r=>(r.mentions&&r.mentions>0)||(r.x_buzz&&r.x_buzz>0)).slice(0,80);
     document.getElementById('meta').textContent=
-      `${all.length} titres discutés · ${data.generated_utc?new Date(data.generated_utc).toLocaleString('fr-FR'):'—'}`;
-    const rows=document.getElementById('rows'); rows.innerHTML="";
-    all.forEach(r=>{
-      const sent=r.x_sent;
-      const sentTxt=sent==null?'–':`<span class="${sent>=0?'pos':'neg'}">${sent>=0?'+':''}${sent.toFixed(2)}</span>`;
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td class="tk">${r.ticker}<div class="tkname">${r.name||''}</div></td>
-        <td class="src">${r.src||''}</td>
-        <td>${fmt(r.mentions)}</td>
-        <td>${r.x_buzz!=null?`${Math.round(r.x_buzz)} <span class="bar"><span style="width:${Math.min(100,r.x_buzz)}%"></span></span>`:'–'}</td>
-        <td>${sentTxt}</td>
-        <td>${r.short_int!=null?(r.short_int*100).toFixed(1)+'%':'–'}</td>
-        <td>${fmt(r.float_m)}</td>
-        <td>${r.last_price!=null?'$'+r.last_price.toFixed(2):'–'}</td>
-        <td>${pctS(r.chg_5d)}</td>`;
-      rows.appendChild(tr);
-    });
-    document.getElementById('empty').innerHTML=all.length?"":
-      '<div style="padding:26px;text-align:center;color:var(--muted)">Rien de particulièrement discuté en ce moment.</div>';
+      `${DATA.length} titres discutés · ${data.generated_utc?new Date(data.generated_utc).toLocaleString('fr-FR'):'—'}`;
+    renderAnalysis(data.analysis);
+    renderHead(); renderRows();
   }).catch(()=>{document.getElementById('meta').textContent="scan en cours de génération…";});
 }
 load();
-setInterval(load, 180000); // rafraîchit toutes les 3 min
+setInterval(load, 180000);
 </script>
 </body>
 </html>
