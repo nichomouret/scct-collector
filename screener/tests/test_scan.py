@@ -12,7 +12,10 @@ import csv
 import os
 import tempfile
 
-from screener.scan import ScanConfig, scan_ticker, scan_universe, _emit_universe
+from screener.scan import (
+    ScanConfig, scan_ticker, scan_universe, _emit_universe, _emit_overlay,
+    _OVERLAY_COLS,
+)
 from screener.output.scan_report import render_html
 from screener.tests.test_backtest import _series
 
@@ -40,6 +43,37 @@ class TestScan(unittest.TestCase):
         data = {"A": ("A", b1, m), "B": ("B", b1, m)}
         out = scan_universe(data, ScanConfig(dis_min=1.0))
         self.assertEqual(len(out), 2)
+
+    def test_targets_are_multiples_of_risk(self):
+        bars, mkt = _series(n=180, shock_at=177, kind="recover")
+        c = scan_ticker("TST", "Test", bars, mkt, ScanConfig(dis_min=1.0))
+        self.assertIsNotNone(c["target_2r"])
+        risk = c["price"] - c["stop_level"]
+        self.assertGreater(risk, 0)
+        self.assertAlmostEqual(c["target_2r"], c["price"] + 2 * risk, places=6)
+        self.assertAlmostEqual(c["target_3r"], c["price"] + 3 * risk, places=6)
+
+    def test_tradeable_sorted_before_blocked(self):
+        # capitulation -> tranche 1 OK ; grinding -> bloqué. Le tradeable remonte.
+        b_ok, m = _series(n=180, shock_at=177, kind="recover")
+        b_block, _ = _series(n=180, shock_at=177, kind="grind")
+        data = {"BLOCK": ("B", b_block, m), "OK": ("A", b_ok, m)}
+        out = scan_universe(data, ScanConfig(dis_min=1.0))
+        if any(c["tranche1_ok"] for c in out) and any(not c["tranche1_ok"] for c in out):
+            self.assertTrue(out[0]["tranche1_ok"])   # entrable en tête
+
+    def test_emit_overlay_template(self):
+        cands = [{"ticker": "ZZZ", "stop_pct": 0.087}]
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "ov.csv")
+            n = _emit_overlay(path, cands)
+            self.assertEqual(n, 1)
+            with open(path) as f:
+                rows = list(csv.DictReader(f))
+        self.assertEqual(list(rows[0].keys()), _OVERLAY_COLS)
+        self.assertEqual(rows[0]["ticker"], "ZZZ")
+        self.assertEqual(rows[0]["hard_stop_distance"], "0.087")   # stop pré-rempli
+        self.assertEqual(rows[0]["cause_class"], "")               # à remplir à la main
 
 
 class TestEmitUniverse(unittest.TestCase):

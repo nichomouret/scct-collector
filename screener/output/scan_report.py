@@ -31,6 +31,15 @@ _CARD_CSS = """
 .bt .metrics .k{color:var(--muted);} .bt .metrics .v{font-variant-numeric:tabular-nums;font-weight:600;}
 .bt .stop{font-size:12.5px;color:var(--ink2);}
 .bt .empty{padding:30px;text-align:center;color:var(--muted);}
+.bt .plan{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--grid);
+  border-radius:10px;overflow:hidden;}
+.bt .plan > div{padding:7px 8px;text-align:center;border-right:1px solid var(--grid);}
+.bt .plan > div:last-child{border-right:0;}
+.bt .plan .lb{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.bt .plan .pr{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
+.bt .plan .pc{font-size:10.5px;font-variant-numeric:tabular-nums;}
+.bt .plan .stop .pr,.bt .plan .stop .pc{color:var(--crit);}
+.bt .plan .tgt .pr,.bt .plan .tgt .pc{color:var(--good);}
 """
 
 _ARCH_FR = {
@@ -49,6 +58,20 @@ def _card(c: dict) -> str:
     if c.get("stop_level") is not None and c.get("stop_pct") is not None:
         stop = (f'<div class="stop">Stop structurel : sous <strong>{c["stop_level"]:.2f}</strong> '
                 f'(−{c["stop_pct"]*100:.1f}% du cours)</div>')
+    plan = ""
+    if c.get("target_2r") is not None:
+        px = c.get("price", 0)
+        t2, t3 = c["target_2r"], c.get("target_3r")
+        t2p = (t2 - px) / px if px else 0
+        t3s = (f'<div class="tgt"><div class="lb">Objectif 3R</div>'
+               f'<div class="pr">{t3:.2f}</div><div class="pc">+{((t3-px)/px)*100:.0f}%</div></div>'
+               if t3 else '<div></div>')
+        plan = (f'<div class="plan">'
+                f'<div class="stop"><div class="lb">Stop</div><div class="pr">{c["stop_level"]:.2f}</div>'
+                f'<div class="pc">−{c["stop_pct"]*100:.1f}%</div></div>'
+                f'<div class="tgt"><div class="lb">Objectif 2R</div><div class="pr">{t2:.2f}</div>'
+                f'<div class="pc">+{t2p*100:.0f}%</div></div>'
+                f'{t3s}</div>')
     return f"""<div class="cand">
 <div class="top"><div><div class="tk">{_e(c.get("ticker"))}</div>
 <div class="nm">{_e((c.get("name") or "")[:34])}</div></div>
@@ -62,6 +85,7 @@ def _card(c: dict) -> str:
 <div class="m"><span class="k">Volume</span><span class="v">{c.get("z_volume",0):+.1f}σ</span></div>
 <div class="m"><span class="k">Archétype</span><span class="v" style="font-weight:500">{_e(arch)}</span></div>
 </div>
+{plan}
 {stop}
 </div>"""
 
@@ -83,11 +107,13 @@ def render_html(result: dict, standalone: bool = True) -> str:
 <p class="sub">{len(cands)} candidat(s) · {n_scan} titres scannés · au {_e(asof)} · seuil DIS ≥ {_e(dmin)}</p>
 <div class="intro">
 <strong>Ce sont des candidats, pas des ordres.</strong> Le scanner repère la
-dislocation technique (couche 2, §4) — le <em>filtre d'entrée</em>. Le backtest
-montre que ce signal seul ne suffit pas : avant de trader, confirme une <strong>raison</strong>
-(catalyseur daté, réfutation, décote, news) via les routes qualitatives. Entrée par
-tranches (PATH §7.3) : tranche 1 immédiate si l'archétype n'est pas un vendeur actif,
-tranche 2 sur stabilisation (STAB ≥ 6).
+dislocation technique (couche 2, §4) — le <em>filtre d'entrée</em> — et pré-calcule
+le <strong>stop structurel</strong> et des <strong>objectifs 2R/3R</strong> (cadre
+risque/rendement, pas une thèse de valorisation). Les titres <em>entrables</em>
+(tranche 1 possible) sont classés en tête ; les <em>vendeurs actifs</em> restent à
+attendre. Avant de trader, confirme une <strong>raison</strong> (catalyseur, réfutation,
+décote, news) : remplis le gabarit d'overlay (<code>scan --emit-overlay</code>) sur le
+titre qui t'intéresse, puis <code>run --overlay</code> pour obtenir le dossier admis.
 </div>
 {grid}
 </div></div>"""

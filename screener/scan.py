@@ -60,6 +60,12 @@ def scan_ticker(ticker: str, name: str, bars: List[PriceBar],
     price = bars[-1].close
     shock_low = bars[det.shock_idx].low
     stop_pct = (price - shock_low) / price if price else None
+    # Objectif TECHNIQUE : risque défini par le stop structurel (§7.3.3), cible à
+    # 2R / 3R. Pas de valeur fondamentale ici (le scanner n'a que les prix) — ces
+    # cibles sont un cadre risque/rendement, pas une thèse de valorisation.
+    risk = price - shock_low if (price and shock_low < price) else None
+    target_2r = price + 2 * risk if risk and risk > 0 else None
+    target_3r = price + 3 * risk if risk and risk > 0 else None
     return {
         "ticker": ticker, "name": name, "price": price,
         "days_since_shock": det.days_since_shock,
@@ -68,6 +74,7 @@ def scan_ticker(ticker: str, name: str, bars: List[PriceBar],
         "tranche1_ok": plan.tranche1_ok, "tranche2_armed": plan.tranche2_armed,
         "blocked_reason": plan.blocked_reason,
         "stop_level": shock_low, "stop_pct": stop_pct,
+        "target_2r": target_2r, "target_3r": target_3r,
     }
 
 
@@ -78,7 +85,9 @@ def scan_universe(data: Dict[str, Tuple[str, List[PriceBar], List[PriceBar]]],
         c = scan_ticker(ticker, name, bars, mkt, cfg)
         if c:
             out.append(c)
-    out.sort(key=lambda c: c["dis"], reverse=True)
+    # Tri « tradeable d'abord » : les setups entrables tout de suite (archétype
+    # non bloquant → tranche 1 possible) remontent, puis par ampleur (DIS).
+    out.sort(key=lambda c: (c["tranche1_ok"], c["dis"]), reverse=True)
     return out
 
 
@@ -131,9 +140,41 @@ def _market_symbol(uni: dict) -> str:
     return _DEFAULT_INDEX.get((uni.get("region") or "US").strip().upper(), "^GSPC")
 
 
+# Colonnes d'overlay qualitatif que l'humain remplit pour qualifier un titre
+# (§6.7 « l'outil pré-instruit, l'humain tranche »). Consommées par run --overlay.
+_OVERLAY_COLS = [
+    "ticker", "cause_class", "permanence", "expected_resolution_days",
+    "fv_low", "fv_mid", "fv_high", "val_z", "aqs", "insider_buy",
+    "capi_effacee", "impact_flux_actualise", "net_debt_ebitda", "recovery_precedents",
+    "rebut_score", "response_date_days", "upside_thesis_pct", "scenario_documented",
+    "hard_stop_distance", "hard_stop_level_motivated", "analysis",
+]
+
+
+def _emit_overlay(path: str, candidates: List[dict]) -> int:
+    """Écrit un gabarit d'overlay (une ligne par touche) à remplir à la main.
+
+    Pré-remplit `ticker` et pose `hard_stop_distance` = distance au stop
+    structurel (le scanner la connaît) ; les autres champs qualitatifs sont
+    laissés vides pour saisie humaine avant `run --overlay`."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=_OVERLAY_COLS)
+        w.writeheader()
+        for c in candidates:
+            row = {k: "" for k in _OVERLAY_COLS}
+            row["ticker"] = c["ticker"]
+            if c.get("stop_pct"):                       # stop structurel connu → S4(b)
+                row["hard_stop_distance"] = round(c["stop_pct"], 4)
+                row["hard_stop_level_motivated"] = "true"
+            w.writerow(row)
+    return len(candidates)
+
+
 def run(universe_path: str, offline: bool, cache_dir: str, cfg: ScanConfig,
         html_path: Optional[str], json_path: Optional[str],
-        emit_universe: Optional[str] = None, default_coverage: str = "3") -> int:
+        emit_universe: Optional[str] = None, default_coverage: str = "3",
+        emit_overlay: Optional[str] = None) -> int:
     universe = _load_universe(universe_path)
     market_cache: Dict[str, list] = {}
     data: Dict[str, Tuple[str, list, list]] = {}
@@ -181,6 +222,10 @@ def run(universe_path: str, offline: bool, cache_dir: str, cfg: ScanConfig,
         n = _emit_universe(emit_universe, universe, candidates, default_coverage)
         print(f"-> {emit_universe}  ({n} titre(s) — prêt pour build_fundamentals / "
               f"build_news / run)")
+    if emit_overlay:
+        n = _emit_overlay(emit_overlay, candidates)
+        print(f"-> {emit_overlay}  ({n} ligne(s) — remplis la cause à la main puis "
+              f"run --overlay)")
     for e in errors:
         print(f"  ! {e}")
     return 0
@@ -201,12 +246,15 @@ def main(argv=None) -> int:
                          "build_fundamentals / build_news / run)")
     ap.add_argument("--default-coverage", default="3",
                     help="analyst_coverage par défaut pour les lignes émises (S1)")
+    ap.add_argument("--emit-overlay", default=None, metavar="PATH",
+                    help="écrit un gabarit d'overlay à remplir à la main (cause, "
+                         "valorisation…) pour qualifier un titre → run --overlay")
     args = ap.parse_args(argv)
     if not os.path.exists(args.universe):
         sys.exit(f"univers introuvable : {args.universe}")
     cfg = ScanConfig(dis_min=args.dis_min, fresh_max_days=args.fresh_max_days, rng=args.range)
     return run(args.universe, args.offline, args.cache_dir, cfg, args.html, args.json,
-               args.emit_universe, args.default_coverage)
+               args.emit_universe, args.default_coverage, args.emit_overlay)
 
 
 if __name__ == "__main__":
