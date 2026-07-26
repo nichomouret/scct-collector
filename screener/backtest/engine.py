@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from ..detection.path_archetype import PriceBar, classify_archetype
-from ..detection.residuals import compute_detection
+from ..detection.residuals import compute_detection, returns_by_date
 from ..models import BLOCKING_ARCHETYPES
 from ..execution.exit_rules import EXIT_RULES
 from .costs import Costs
@@ -75,8 +75,9 @@ def technical_entries(bars: List[PriceBar], market_bars: List[PriceBar],
     cfg = cfg or BacktestConfig()
     entered: set = set()
     out: List[Entry] = []
+    mkt_r = returns_by_date(market_bars)           # pré-calcul une fois (perf backtest)
     for t in range(cfg.warmup, len(bars) - 1):     # besoin de t+1 pour l'embargo
-        det = compute_detection(bars[:t + 1], market_bars)
+        det = compute_detection(bars[:t + 1], market_bars, market_returns=mkt_r)
         if det.shock_idx is None or not det.fresh:
             continue
         if det.days_since_shock is None or det.days_since_shock > cfg.fresh_max_days:

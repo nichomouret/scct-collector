@@ -50,6 +50,11 @@ def _returns_by_date(bars: List[PriceBar]) -> Dict[str, float]:
     return out
 
 
+def returns_by_date(bars: List[PriceBar]) -> Dict[str, float]:
+    """Rendements simples par date — public, pour pré-calcul (backtest §10)."""
+    return _returns_by_date(bars)
+
+
 def _ols(xs: List[float], ys: List[float]):
     """Régression OLS simple y = alpha + beta·x. Renvoie (alpha, beta)."""
     n = len(xs)
@@ -84,16 +89,21 @@ def _z_volume(bars: List[PriceBar]) -> float:
     return (bars[-1].volume - m) / s
 
 
-def compute_detection(bars: List[PriceBar], market_bars: List[PriceBar]) -> DetectionResult:
+def compute_detection(bars: List[PriceBar], market_bars: List[PriceBar],
+                      market_returns: Optional[Dict[str, float]] = None) -> DetectionResult:
     """
     Calcule le résidu marché-neutre et le score de dislocation.
 
     Point-in-time léger : (alpha, beta) sont estimés sur les 250 derniers points
     ALIGNÉS disponibles, et les résidus/σ sur cette même fenêtre — pas de donnée
     postérieure à la dernière barre.
+
+    `market_returns` (optionnel) : rendements marché pré-calculés, pour éviter de
+    les recalculer à chaque appel dans la boucle jour par jour du backtest (§10).
+    L'alignement reste borné par les dates du titre → aucune fuite.
     """
     stock_r = _returns_by_date(bars)
-    mkt_r = _returns_by_date(market_bars)
+    mkt_r = market_returns if market_returns is not None else _returns_by_date(market_bars)
     common = [d for d in sorted(stock_r) if d in mkt_r]
     if len(common) < 80:
         # historique insuffisant : pas de détection exploitable.

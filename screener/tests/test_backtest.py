@@ -149,6 +149,26 @@ class TestDetection(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 # Placebo & métriques                                                          #
 # --------------------------------------------------------------------------- #
+class TestPerfEquivalenceAndUniverse(unittest.TestCase):
+    def test_precomputed_market_returns_equivalence(self):
+        # Le pré-calcul des rendements marché ne doit RIEN changer à la détection.
+        from screener.detection.residuals import compute_detection, returns_by_date
+        bars, mkt = _series(kind="recover")
+        mkt_r = returns_by_date(mkt)
+        for t in (150, 160, 175):
+            a = compute_detection(bars[:t + 1], mkt)
+            b = compute_detection(bars[:t + 1], mkt, market_returns=mkt_r)
+            self.assertEqual((a.shock_idx, a.days_since_shock, round(a.dis, 9)),
+                             (b.shock_idx, b.days_since_shock, round(b.dis, 9)))
+
+    def test_universe_symbol_filter(self):
+        from screener.build_universe import _VALID
+        for good in ("AAPL", "BRK-B", "RDS.A", "F", "ABVX"):
+            self.assertTrue(_VALID.match(good), good)
+        for bad in ("", "TOOLONGSYM", "12ABC", "A B", "$XYZ"):
+            self.assertFalse(_VALID.match(bad), bad)
+
+
 class TestPlaceboAndMetrics(unittest.TestCase):
     def test_placebo_runs(self):
         bars, mkt = _series(kind="recover")

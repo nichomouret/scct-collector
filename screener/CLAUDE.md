@@ -40,6 +40,12 @@ auront leurs inputs historiques.
 | `backtest/placebo.py` | §10.10 | Même simulation sur entrées aléatoires |
 | `run_backtest.py` | §10 | CLI : métriques, split hors échantillon (§10.8), placebo, motifs de sortie |
 
+**Univers** : `build_universe.py` tire l'univers US depuis SEC `company_tickers.json`
+(gratuit), saute le haut du classement (méga-caps) pour viser la bande small/mid
+(§6.3), filtre SPAC/warrants/preferreds (§3.1). ⚠️ **biais de survivance (§10.4)** :
+émetteurs encore cotés uniquement → résultat de backtest optimiste.
+`python -m screener.build_universe --sample 45 --skip-top 400`.
+
 `python -m screener.run_backtest [--offline] [--range 5y] [--dis-min] [--tax-bps 30]`.
 Exits (ordre conservateur, fill défavorable d'abord) : MAE −15 % → stop structurel
 → cible → time-stop 40. **Un backtest réel exige un vrai univers** (small/mid EU/TASE,
