@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import unittest
 
-from screener.scan import ScanConfig, scan_ticker, scan_universe
+import csv
+import os
+import tempfile
+
+from screener.scan import ScanConfig, scan_ticker, scan_universe, _emit_universe
 from screener.output.scan_report import render_html
 from screener.tests.test_backtest import _series
 
@@ -36,6 +40,40 @@ class TestScan(unittest.TestCase):
         data = {"A": ("A", b1, m), "B": ("B", b1, m)}
         out = scan_universe(data, ScanConfig(dis_min=1.0))
         self.assertEqual(len(out), 2)
+
+
+class TestEmitUniverse(unittest.TestCase):
+    def test_emit_preserves_fields_and_order(self):
+        universe = [
+            {"ticker": "AAA", "symbol": "AAA", "name": "Alpha", "sector": "Tech",
+             "region": "EU", "analyst_coverage": "5", "market_index": "^STOXX50E",
+             "target_position_value": "500000", "sponsor": ""},
+            {"ticker": "BBB", "name": "Beta"},   # champs manquants → défauts
+        ]
+        candidates = [{"ticker": "BBB", "name": "Beta"}, {"ticker": "AAA", "name": "Alpha"}]
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "hits.csv")
+            n = _emit_universe(path, universe, candidates, default_coverage="3")
+            self.assertEqual(n, 2)
+            with open(path) as f:
+                rows = list(csv.DictReader(f))
+        self.assertEqual([r["ticker"] for r in rows], ["BBB", "AAA"])  # ordre scanner
+        aaa = rows[1]
+        self.assertEqual(aaa["region"], "EU")
+        self.assertEqual(aaa["analyst_coverage"], "5")        # conservé de l'univers
+        self.assertEqual(aaa["market_index"], "^STOXX50E")
+        self.assertEqual(aaa["market_cap"], "")               # rempli plus tard par SEC
+        bbb = rows[0]
+        self.assertEqual(bbb["analyst_coverage"], "3")        # défaut appliqué
+        self.assertEqual(bbb["symbol"], "BBB")                # défaut = ticker
+        self.assertEqual(bbb["region"], "US")
+
+    def test_emit_empty(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "hits.csv")
+            self.assertEqual(_emit_universe(path, [], [], "3"), 0)
+            with open(path) as f:
+                self.assertIn("ticker", f.readline())         # en-tête présent
 
 
 class TestScanReport(unittest.TestCase):

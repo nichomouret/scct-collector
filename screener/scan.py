@@ -87,6 +87,43 @@ def _load_universe(path: str) -> List[dict]:
         return [r for r in csv.DictReader(f) if (r.get("ticker") or "").strip()]
 
 
+# Colonnes d'univers attendues par build_universe / build_* / run.
+_UNI_COLS = ["ticker", "symbol", "name", "sector", "region", "market_cap",
+             "analyst_coverage", "target_position_value", "market_index", "sponsor"]
+
+
+def _emit_universe(path: str, universe: List[dict], candidates: List[dict],
+                   default_coverage: str) -> int:
+    """Écrit les titres décrochés au format univers (pont scanner → qualification).
+
+    Conserve les champs des lignes d'origine (région, indice, coverage…) et suit
+    l'ordre du scanner (DIS décroissant). `market_cap` est laissé vide : c'est
+    build_fundamentals (source SEC) qui le remplit ensuite."""
+    by_tk = {(u.get("ticker") or "").strip().upper(): u for u in universe}
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    n = 0
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=_UNI_COLS)
+        w.writeheader()
+        for c in candidates:
+            u = by_tk.get(c["ticker"], {})
+            cov = (u.get("analyst_coverage") or "").strip() or default_coverage
+            w.writerow({
+                "ticker": c["ticker"],
+                "symbol": (u.get("symbol") or c["ticker"]).strip(),
+                "name": u.get("name") or c.get("name") or c["ticker"],
+                "sector": u.get("sector") or "",
+                "region": (u.get("region") or "US").strip(),
+                "market_cap": "",                       # rempli par build_fundamentals
+                "analyst_coverage": cov,
+                "target_position_value": u.get("target_position_value") or "",
+                "market_index": u.get("market_index") or "",
+                "sponsor": u.get("sponsor") or "",
+            })
+            n += 1
+    return n
+
+
 def _market_symbol(uni: dict) -> str:
     if uni.get("market_index"):
         return uni["market_index"].strip()
@@ -94,7 +131,8 @@ def _market_symbol(uni: dict) -> str:
 
 
 def run(universe_path: str, offline: bool, cache_dir: str, cfg: ScanConfig,
-        html_path: Optional[str], json_path: Optional[str]) -> int:
+        html_path: Optional[str], json_path: Optional[str],
+        emit_universe: Optional[str] = None, default_coverage: str = "3") -> int:
     universe = _load_universe(universe_path)
     market_cache: Dict[str, list] = {}
     data: Dict[str, Tuple[str, list, list]] = {}
@@ -138,6 +176,10 @@ def run(universe_path: str, offline: bool, cache_dir: str, cfg: ScanConfig,
         with open(html_path, "w") as f:
             f.write(render_html(result, standalone=True))
         print(f"-> {html_path}  (ouvrir dans un navigateur)")
+    if emit_universe:
+        n = _emit_universe(emit_universe, universe, candidates, default_coverage)
+        print(f"-> {emit_universe}  ({n} titre(s) — prêt pour build_fundamentals / "
+              f"build_news / run)")
     for e in errors:
         print(f"  ! {e}")
     return 0
@@ -153,11 +195,17 @@ def main(argv=None) -> int:
     ap.add_argument("--offline", action="store_true")
     ap.add_argument("--html", default=None)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--emit-universe", default=None, metavar="PATH",
+                    help="écrit les titres décrochés au format univers (pont vers "
+                         "build_fundamentals / build_news / run)")
+    ap.add_argument("--default-coverage", default="3",
+                    help="analyst_coverage par défaut pour les lignes émises (S1)")
     args = ap.parse_args(argv)
     if not os.path.exists(args.universe):
         sys.exit(f"univers introuvable : {args.universe}")
     cfg = ScanConfig(dis_min=args.dis_min, fresh_max_days=args.fresh_max_days, rng=args.range)
-    return run(args.universe, args.offline, args.cache_dir, cfg, args.html, args.json)
+    return run(args.universe, args.offline, args.cache_dir, cfg, args.html, args.json,
+               args.emit_universe, args.default_coverage)
 
 
 if __name__ == "__main__":
