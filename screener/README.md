@@ -11,9 +11,27 @@ d'architecture : [`CLAUDE.md`](CLAUDE.md).
 ## Démarrage
 
 ```bash
-python -m unittest discover -s screener/tests   # 40 tests, stdlib uniquement
-python -m screener.demo                          # imprime une fiche 1 page
+python -m unittest discover -s screener/tests   # 45 tests, stdlib uniquement
+python -m screener.demo                          # imprime une fiche 1 page (données synthétiques)
+python -m screener.run                           # tranche verticale : watchlist -> short-list (live)
+python -m screener.run --offline                 # idem, cache uniquement, aucun réseau
 ```
+
+## Tranche verticale (`screener.run`)
+
+Enchaîne bout à bout : univers CSV → prix (Yahoo, sans clé, cache quotidien) →
+détection résiduelle marché-neutre (§4) → assemblage de `Candidate` → moteur de
+décision → short-list classée + fiches des dossiers admis.
+
+- **`ingestion/prices.py`** — barres OHLCV depuis Yahoo, cache disque, chargeur CSV offline.
+- **`detection/residuals.py`** — résidu marché-neutre (bêta unique — simplification
+  assumée du modèle 4 facteurs §4.1), `z_res`, `DIS`, `z_volume`, jours depuis le choc.
+- **`universe/candidate_builder.py`** — fusionne détection (prix) + overlay qualitatif
+  (les champs qui, dans le système complet, viennent des couches LLM/analystes/options).
+- Entrées : `data/universe.sample.csv`, `data/catalysts.sample.csv`, `data/overlay.sample.csv`.
+
+Sans overlay ni catalyseur, un simple décrochage de prix échoue le socle S3
+(pas d'horizon de résolution) — c'est voulu : un décrochage n'est pas un dossier.
 
 ## Usage
 

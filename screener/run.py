@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""
+Tranche verticale runnable — de la watchlist à la short-list + fiches.
+=====================================================================
+Enchaîne : univers (CSV) → prix (Yahoo/cache) → détection résiduelle → assemblage
+de `Candidate` → moteur de décision (socle + routes + conviction + taille + PATH)
+→ short-list classée + fiches 1 page pour les dossiers admis.
+
+Usage :
+    python -m screener.run                         # watchlist d'exemple, données live
+    python -m screener.run --universe u.csv --overlay o.csv --catalysts c.csv
+    python -m screener.run --offline               # cache uniquement, aucun réseau
+
+Fichiers d'entrée (voir screener/data/*.sample.csv) :
+    --universe   ticker,symbol,name,sector,place,region,market_cap,analyst_coverage,
+                 target_position_value,market_index
+    --catalysts  ticker,catalyst_type,date_expected,date_certainty,days_to_catalyst,
+                 binary,expected_move_pct,power,source_url
+    --overlay    ticker,<champs qualitatifs>  (cause_class, permanence, fv_low, val_z,
+                 aqs, insider_buy, capi_effacee, rebut_score, pms, ...)
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import os
+import sys
+from typing import Dict, List, Optional
+
+from .ingestion.prices import PriceFetchError, load_bars
+from .universe.candidate_builder import build_candidate
+from .engine import evaluate_candidate, EvaluationResult
+from .models import Region
+from .output import dossier
+
+_HERE = os.path.dirname(__file__)
+_DATA = os.path.join(_HERE, "data")
+
+_DEFAULT_INDEX = {Region.US: "^GSPC", Region.EU: "^STOXX50E", Region.IL: "^TA125.TA"}
+
+
+def _load_keyed(path: Optional[str]) -> Dict[str, dict]:
+    if not path or not os.path.exists(path):
+        return {}
+    out: Dict[str, dict] = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            tk = (row.get("ticker") or "").strip().upper()
+            if tk:
+                out[tk] = row
+    return out
+
+
+def _load_universe(path: str) -> List[dict]:
+    with open(path) as f:
+        return [r for r in csv.DictReader(f) if (r.get("ticker") or "").strip()]
+
+
+def _market_symbol(uni: dict) -> str:
+    if uni.get("market_index"):
+        return uni["market_index"].strip()
+    region = uni.get("region", "US").strip().upper()
+    try:
+        return _DEFAULT_INDEX[Region(region)]
+    except ValueError:
+        return "^GSPC"
+
+
+def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optional[str],
+        cache_dir: str, standard_size: float, offline: bool, rng: str,
+        show_all: bool) -> int:
+    universe = _load_universe(universe_path)
+    catalysts = _load_keyed(catalysts_path)
+    overlay = _load_keyed(overlay_path)
+
+    market_cache: Dict[str, list] = {}
+    results: List[EvaluationResult] = []
+    errors: List[str] = []
+
+    for uni in universe:
+        tk = uni["ticker"].strip().upper()
+        symbol = (uni.get("symbol") or tk).strip()
+        mkt_sym = _market_symbol(uni)
+        try:
+            bars = load_bars(symbol, cache_dir=cache_dir, rng=rng, offline=offline)
+            if mkt_sym not in market_cache:
+                market_cache[mkt_sym] = load_bars(mkt_sym, cache_dir=cache_dir,
+                                                  rng=rng, offline=offline)
+            mkt = market_cache[mkt_sym]
+        except PriceFetchError as e:
+            errors.append(f"{tk}: {e}")
+            continue
+
+        bc = build_candidate(uni, bars, mkt,
+                             catalyst_row=catalysts.get(tk), overlay=overlay.get(tk))
+        res = evaluate_candidate(bc.candidate, standard_size=standard_size,
+                                 bars=bc.bars, shock_idx=bc.shock_idx,
+                                 stab_features=bc.stab_features)
+        results.append(res)
+
+    # Tri : admis d'abord, puis par conviction décroissante.
+    results.sort(key=lambda r: (r.admitted, r.conviction.conv), reverse=True)
+    _print_table(results, errors)
+
+    admitted = [r for r in results if r.admitted]
+    to_show = results if show_all else admitted
+    for r in to_show:
+        print("\n" + "=" * 63)
+        print(dossier.render(r))
+    if not admitted:
+        print("\n(aucun dossier admis aujourd'hui — normal : ~60-90 setups/an, §6.2)")
+    return 0
+
+
+def _print_table(results: List[EvaluationResult], errors: List[str]) -> None:
+    print(f"\nSHORT-LIST — {sum(r.admitted for r in results)} admis / {len(results)} évalués")
+    print("-" * 78)
+    print(f"{'Ticker':<10}{'Admis':>6}{'Routes':>10}{'n':>3}{'Conv':>6}"
+          f"{'Taille':>7}  {'Archétype':<16}{'DIS':>5}{'dsc':>5}")
+    print("-" * 78)
+    for r in results:
+        c = r.candidate
+        routes = "".join(rt.value for rt in r.route_labels) or "-"
+        arch = r.path.archetype.value if r.path.archetype else "-"
+        dsc = c.days_since_shock if c.days_since_shock is not None else "-"
+        print(f"{c.ticker:<10}{'✓' if r.admitted else '·':>6}{routes:>10}{r.n_routes:>3}"
+              f"{min(r.conviction.conv,10.0):>6.1f}{r.sizing.final_size:>7.2f}  "
+              f"{arch:<16}{c.dis:>5.1f}{str(dsc):>5}")
+    if errors:
+        print("\nErreurs d'ingestion :")
+        for e in errors:
+            print(f"  ! {e}")
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="Screener de dislocation — tranche verticale")
+    ap.add_argument("--universe", default=os.path.join(_DATA, "universe.sample.csv"))
+    ap.add_argument("--catalysts", default=os.path.join(_DATA, "catalysts.sample.csv"))
+    ap.add_argument("--overlay", default=os.path.join(_DATA, "overlay.sample.csv"))
+    ap.add_argument("--cache-dir", default=os.path.join(_HERE, ".cache"))
+    ap.add_argument("--standard-size", type=float, default=1.0)
+    ap.add_argument("--range", default="2y", help="fenêtre d'historique Yahoo (ex. 1y, 2y, 5y)")
+    ap.add_argument("--offline", action="store_true", help="cache uniquement, aucun réseau")
+    ap.add_argument("--show-all", action="store_true",
+                    help="imprime les fiches de tous les titres, pas seulement les admis")
+    args = ap.parse_args(argv)
+
+    if not os.path.exists(args.universe):
+        sys.exit(f"univers introuvable : {args.universe}")
+    return run(args.universe, args.catalysts, args.overlay, args.cache_dir,
+               args.standard_size, args.offline, args.range, args.show_all)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

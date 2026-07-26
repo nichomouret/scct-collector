@@ -22,6 +22,21 @@ Partie **déterministe et testable sans aucun flux payant** — roadmap P5 + cou
 | `output/dossier.py` | §7.5 | Rendu de la **fiche 1 page** |
 | `engine.py` | §7 | Orchestrateur : socle → routes → conviction → taille → PATH |
 
+## Tranche verticale runnable (`screener.run`)
+
+Bout à bout, données réelles gratuites — de la watchlist à la short-list :
+
+| Module | SPEC | Rôle |
+|---|---|---|
+| `ingestion/prices.py` | Couche 0 | Barres OHLCV (Yahoo sans clé) + cache quotidien + chargeur CSV offline |
+| `detection/residuals.py` | §4.1-4.4 | Résidu **marché-neutre** (bêta unique, simplification assumée du 4-facteurs), `z_res`, `DIS`, `z_volume`, jours depuis le choc |
+| `universe/candidate_builder.py` | Couche 1 | Fusionne détection (prix) + catalyseur + **overlay** qualitatif → `Candidate` |
+| `run.py` | — | CLI : univers → prix → détection → build → moteur → short-list + fiches |
+
+`python -m screener.run [--offline] [--universe u.csv --catalysts c.csv --overlay o.csv]`.
+Cache dans `screener/.cache/` (gitignoré). Sans overlay/catalyseur, un décrochage
+échoue le socle S3 — voulu : un décrochage de prix n'est pas un dossier.
+
 **Principes d'architecture à ne jamais casser** (ils viennent de la SPEC) :
 1. Pas de score unique moyennant des signaux à demi-vies incompatibles — **cascade de portes**.
 2. `PATH` **ne crée aucune admission** : un titre non admis par socle+route n'entre jamais.
