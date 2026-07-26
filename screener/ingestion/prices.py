@@ -106,8 +106,13 @@ def load_bars(symbol: str, cache_dir: Optional[str] = None, rng: str = "2y",
 
     - offline=True : lit uniquement le cache CSV (aucun réseau) ; lève si absent.
     - sinon : sert le cache s'il date d'aujourd'hui, sinon frappe Yahoo et met à jour.
+
+    Le cache est keyé par (symbole, `rng`) : deux fenêtres d'historique
+    différentes ne se recouvrent pas (sinon `--range 10y` renverrait le cache
+    2y/5y déjà présent).
     """
-    cache_path = os.path.join(cache_dir, f"{symbol}.csv") if cache_dir else None
+    safe = symbol.replace("/", "_")
+    cache_path = os.path.join(cache_dir, f"{safe}_{rng}.csv") if cache_dir else None
 
     if offline:
         if cache_path and os.path.exists(cache_path):
