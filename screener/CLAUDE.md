@@ -22,6 +22,30 @@ Partie **déterministe et testable sans aucun flux payant** — roadmap P5 + cou
 | `output/dossier.py` | §7.5 | Rendu de la **fiche 1 page** |
 | `engine.py` | §7 | Orchestrateur : socle → routes → conviction → taille → PATH |
 
+## Backtest (P6, protocole §10) — le go/no-go chiffré
+
+Harnais complet dans `backtest/`. **Périmètre v1 assumé** : signal
+**price-derived** uniquement (proxy route A — dislocation résiduelle §4 filtrée
+par PATH §7.3). Les routes B/C/E ne sont PAS backtestables (garde anti-fuite LLM
+§10.3 : le classifieur connaît le futur) ; route D en attente de catalyseurs
+archivés PIT. Toute la machinerie §10 est là et réutilisable dès que B/C/D/E
+auront leurs inputs historiques.
+
+| Module | SPEC | Rôle |
+|---|---|---|
+| `backtest/costs.py` | §10.5 | Coûts réels : spread, impact √ADV, commission, taxe FR 0.3 % |
+| `backtest/engine.py` | §10.6-7 | Boucle temporelle, **embargo t+1**, time-stop importé de `exit_rules` (mêmes constantes) |
+| `backtest/metrics.py` | §10.9,11 | Hit/gain·perte/Sharpe/DD + acceptation + **décomposition par route** (min 40) |
+| `backtest/leakage_guard.py` | §10.3 | Invariant : les signaux passés ne changent pas si on colle des barres futures |
+| `backtest/placebo.py` | §10.10 | Même simulation sur entrées aléatoires |
+| `run_backtest.py` | §10 | CLI : métriques, split hors échantillon (§10.8), placebo, motifs de sortie |
+
+`python -m screener.run_backtest [--offline] [--range 5y] [--dis-min] [--tax-bps 30]`.
+Exits (ordre conservateur, fill défavorable d'abord) : MAE −15 % → stop structurel
+→ cible → time-stop 40. **Un backtest réel exige un vrai univers** (small/mid EU/TASE,
+plusieurs centaines de noms) pour atteindre les 150 trades §10.9 — l'univers d'exemple
+(5 méga-caps) est trop mince pour conclure, c'est attendu.
+
 ## Tranche verticale runnable (`screener.run`)
 
 Bout à bout, données réelles gratuites — de la watchlist à la short-list :

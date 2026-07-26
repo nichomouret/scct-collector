@@ -19,7 +19,18 @@ NEWS_API_KEY=xxx ANTHROPIC_API_KEY=yyy python -m screener.build_news   # classif
 ADANOS_API_KEY=xxx python -m screener.build_social  # tendance sociale (contexte, hors scoring) -> social.built.csv
 python -m screener.run                            # tranche verticale : watchlist -> short-list (live)
 python -m screener.run --offline                 # idem, cache uniquement, aucun réseau
+python -m screener.run_backtest --range 5y        # backtest §10 (go/no-go chiffré)
 ```
+
+## Backtest (`screener.run_backtest`, protocole §10)
+
+Le go/no-go chiffré. Rejoue le signal **price-derived** (dislocation résiduelle
++ PATH) sur l'historique, avec coûts réels, embargo t+1, time-stop 40, split hors
+échantillon, décomposition par route et test placebo. **Périmètre v1** : proxy
+route A uniquement — B/C/E attendent des inputs historiques déterministes (garde
+anti-fuite LLM §10.3), D des catalyseurs archivés PIT. Un vrai go/no-go exige un
+univers de plusieurs centaines de small/mid (les 5 méga-caps d'exemple sont trop
+minces pour atteindre les 150 trades §10.9).
 
 Chaîne complète : `build_catalysts` (P1) et `build_short_interest` (Ortex, §4.3)
 produisent des CSV que `run` consomme via `--catalysts` / `--short-interest`.
