@@ -15,6 +15,7 @@ python -m unittest discover -s screener/tests   # 45 tests, stdlib uniquement
 python -m screener.demo                          # imprime une fiche 1 page (données synthétiques)
 python -m screener.build_catalysts               # registre de catalyseurs (CT.gov + CSV) -> catalysts.built.csv
 ORTEX_API_KEY=xxx python -m screener.build_short_interest   # short interest / emprunt (Ortex) -> short_interest.built.csv
+NEWS_API_KEY=xxx ANTHROPIC_API_KEY=yyy python -m screener.build_news   # classification news LLM (§5.3) -> news.built.csv
 python -m screener.run                            # tranche verticale : watchlist -> short-list (live)
 python -m screener.run --offline                 # idem, cache uniquement, aucun réseau
 ```
@@ -24,6 +25,12 @@ produisent des CSV que `run` consomme via `--catalysts` / `--short-interest`.
 Ortex fournit deux confirmateurs de flux (saut du taux d'emprunt, utilisation du
 float) qui rehaussent `DIS` et remplissent la section POSITIONNEMENT de la fiche.
 Sans `ORTEX_API_KEY`, la chaîne tourne quand même (DIS = z-volume seul).
+
+`build_news` (§5.3, P4) classe les news 72h via Claude en `cause_class` /
+`permanence` / `expected_resolution_days` — les champs qui gouvernent le socle S3
+et les routes A/B/E, sinon saisis à la main. L'overlay manuel écrase toujours le
+news LLM. Sans clés, la chaîne retombe sur l'overlay manuel.
+⚠️ Live/forward uniquement — pas pour le backtest (garde anti-fuite LLM, §10.3).
 
 ## Tranche verticale (`screener.run`)
 

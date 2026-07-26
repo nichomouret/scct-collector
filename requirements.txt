@@ -5,3 +5,7 @@ praw>=7.7
 # Laissé actif pour le déploiement Railway avec Postgres ; inoffensif en SQLite.
 psycopg2-binary>=2.9
 # (Quiver retiré : plus de dataset Reddit. backtest_coverage.py teste Adanos via requests.)
+# --- screener/ (dislocation multi-signaux) ---
+# SDK Claude, requis UNIQUEMENT par screener/qualification (classification de news LLM, §5.3).
+# Le reste du paquet screener/ est stdlib pur et dégrade gracieusement sans lui.
+anthropic>=0.40

@@ -67,12 +67,13 @@ def _market_symbol(uni: dict) -> str:
 
 
 def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optional[str],
-        short_interest_path: Optional[str], cache_dir: str, standard_size: float,
-        offline: bool, rng: str, show_all: bool) -> int:
+        short_interest_path: Optional[str], news_path: Optional[str], cache_dir: str,
+        standard_size: float, offline: bool, rng: str, show_all: bool) -> int:
     universe = _load_universe(universe_path)
     catalysts = _load_keyed(catalysts_path)
     overlay = _load_keyed(overlay_path)
     short_interest = _load_keyed(short_interest_path)
+    news = _load_keyed(news_path)   # cause_class/permanence/résolution (LLM, §5.3)
 
     market_cache: Dict[str, list] = {}
     results: List[EvaluationResult] = []
@@ -92,8 +93,10 @@ def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optiona
             errors.append(f"{tk}: {e}")
             continue
 
+        # News-derived (LLM) sous l'overlay manuel : l'humain a le dernier mot.
+        merged_overlay = {**(news.get(tk) or {}), **(overlay.get(tk) or {})}
         bc = build_candidate(uni, bars, mkt,
-                             catalyst_row=catalysts.get(tk), overlay=overlay.get(tk),
+                             catalyst_row=catalysts.get(tk), overlay=merged_overlay or None,
                              short_interest=short_interest.get(tk))
         res = evaluate_candidate(bc.candidate, standard_size=standard_size,
                                  bars=bc.bars, shock_idx=bc.shock_idx,
@@ -141,6 +144,8 @@ def main(argv=None) -> int:
     ap.add_argument("--overlay", default=os.path.join(_DATA, "overlay.sample.csv"))
     ap.add_argument("--short-interest", default=os.path.join(_DATA, "short_interest.built.csv"),
                     help="snapshot Ortex (build_short_interest) ; absent = ignoré")
+    ap.add_argument("--news", default=os.path.join(_DATA, "news.built.csv"),
+                    help="classification news LLM (build_news, §5.3) ; absent = ignoré")
     ap.add_argument("--cache-dir", default=os.path.join(_HERE, ".cache"))
     ap.add_argument("--standard-size", type=float, default=1.0)
     ap.add_argument("--range", default="2y", help="fenêtre d'historique Yahoo (ex. 1y, 2y, 5y)")
@@ -152,7 +157,8 @@ def main(argv=None) -> int:
     if not os.path.exists(args.universe):
         sys.exit(f"univers introuvable : {args.universe}")
     return run(args.universe, args.catalysts, args.overlay, args.short_interest,
-               args.cache_dir, args.standard_size, args.offline, args.range, args.show_all)
+               args.news, args.cache_dir, args.standard_size, args.offline,
+               args.range, args.show_all)
 
 
 if __name__ == "__main__":

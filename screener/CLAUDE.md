@@ -69,6 +69,29 @@ recomptés dans le builder et **rehaussent `DIS`** via `dislocation_score()`
 (§4.4) : `DIS = |z_res|·(1+0.15·Σconfirmateurs)·decay`. Sans clé, tout dégrade
 en `None` et `DIS` retombe sur le seul z-volume. Snapshot gitignoré.
 
+## Classification de news LLM (§5.3, P4 — keystone)
+
+Le module le plus important : il **automatise** `cause_class` / `permanence` /
+`expected_resolution_days` — les champs qui gouvernent le socle S3 et les routes
+A/B/E, et qui devaient sinon être saisis à la main dans l'overlay. C'est
+« l'outil pré-instruit, l'humain tranche » (§6.7) rendu concret.
+
+| Module | SPEC | Rôle |
+|---|---|---|
+| `ingestion/news.py` | §5.3 | NewsAPI (`NEWS_API_KEY`) → news 72h ; dégrade en `[]` sans clé |
+| `qualification/news_classifier.py` | §5.3 | Claude en **sortie structurée** (`output_config.format`) → `NewsClassification` + gating |
+| `build_news.py` | P4 | CLI univers → `news.built.csv` (format overlay, drop-in `run.py --news`) |
+
+- **Modèle** : SPEC §8 (« Sonnet pour le volume ») → défaut `claude-sonnet-5`,
+  surchargé par `SCREENER_LLM_MODEL`. SDK `anthropic` (optionnel, `requirements.txt`).
+- **Précédence** : dans `run.py`, l'overlay manuel **écrase** le news LLM
+  (`{**news, **overlay}`) — l'humain a le dernier mot.
+- **Gating (§5.3)** : `cause ∈ {transitoires}` OU `permanence=TRANSITORY`, ET
+  `expected_resolution_days ≤ 40`.
+- ⚠️ **Garde anti-fuite LLM (§10.3)** : live/forward uniquement. NE PAS brancher
+  dans `backtest/` — le modèle connaît le futur. Documenté dans le module.
+- Sans `ANTHROPIC_API_KEY`, tout dégrade → overlay manuel. `news.built.csv` gitignoré.
+
 **Principes d'architecture à ne jamais casser** (ils viennent de la SPEC) :
 1. Pas de score unique moyennant des signaux à demi-vies incompatibles — **cascade de portes**.
 2. `PATH` **ne crée aucune admission** : un titre non admis par socle+route n'entre jamais.
