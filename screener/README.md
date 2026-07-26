@@ -13,9 +13,13 @@ d'architecture : [`CLAUDE.md`](CLAUDE.md).
 ```bash
 python -m unittest discover -s screener/tests   # 45 tests, stdlib uniquement
 python -m screener.demo                          # imprime une fiche 1 page (données synthétiques)
-python -m screener.run                           # tranche verticale : watchlist -> short-list (live)
+python -m screener.build_catalysts               # registre de catalyseurs (CT.gov + CSV) -> catalysts.built.csv
+python -m screener.run                            # tranche verticale : watchlist -> short-list (live)
 python -m screener.run --offline                 # idem, cache uniquement, aucun réseau
 ```
+
+Chaîne complète : `build_catalysts` (P1) produit `data/catalysts.built.csv`, que
+`run` consomme via `--catalysts data/catalysts.built.csv`.
 
 ## Tranche verticale (`screener.run`)
 

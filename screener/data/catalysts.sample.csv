@@ -1,0 +1,3 @@
+ticker,catalyst_type,date_expected,date_certainty,days_to_catalyst,binary,expected_move_pct,power,source_url
+IBM,EARNINGS,2026-08-20,CERTAIN,25,true,7,MEDIUM,https://www.ibm.com/investor
+MC.PA,EARNINGS,2026-09-10,CERTAIN,30,false,6,MEDIUM,https://www.lvmh.fr/investisseurs

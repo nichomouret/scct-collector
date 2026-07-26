@@ -1,0 +1,6 @@
+ticker,symbol,name,sector,place,region,market_cap,analyst_coverage,target_position_value,market_index,sponsor
+AAPL,AAPL,Apple Inc.,Tech,Nasdaq,US,3000000000000,40,5000000,^GSPC,
+MSFT,MSFT,Microsoft Corp.,Tech,Nasdaq,US,3000000000000,45,5000000,^GSPC,
+IBM,IBM,IBM,Tech,NYSE,US,150000000000,20,5000000,^GSPC,
+MC.PA,MC.PA,LVMH,Consumer,Euronext Paris,EU,350000000000,25,3000000,^FCHI,
+ABVX.PA,ABVX.PA,Abivax,Biotech,Euronext Paris,EU,2000000000,8,1500000,^FCHI,Abivax

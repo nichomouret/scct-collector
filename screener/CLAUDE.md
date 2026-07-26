@@ -37,6 +37,22 @@ Bout à bout, données réelles gratuites — de la watchlist à la short-list :
 Cache dans `screener/.cache/` (gitignoré). Sans overlay/catalyseur, un décrochage
 échoue le socle S3 — voulu : un décrochage de prix n'est pas un dossier.
 
+## Registre de catalyseurs (P1 — module central §3.2)
+
+Alimente le socle S3 et les routes C/D/E. Fournisseurs gratuits, extensibles :
+
+| Module | SPEC | Rôle |
+|---|---|---|
+| `ingestion/catalysts.py` | §3.2, §9 | Fournisseurs : **ClinicalTrials.gov v2** (readouts, sans clé) + CSV manuel → `RawCatalyst` |
+| `universe/catalyst_registry.py` | §3.1-3.2 | Agrège, dédup, `days_to_catalyst` **point-in-time** (§10.2), fenêtre ≤ 45j, → `Catalyst` |
+| `build_catalysts.py` | P1 | CLI : univers → `catalysts.built.csv` (drop-in pour `run.py --catalysts`) |
+
+`python -m screener.build_catalysts [--as-of YYYY-MM-DD] [--all-clinical]`.
+ClinicalTrials.gov n'est interrogé que pour les titres santé/biotech (secteur ou
+colonne `sponsor`), sinon un nom non-santé ramènerait des études sans rapport.
+`--as-of` rend le registre rejouable en point-in-time (indispensable au backtest P6).
+`catalysts.built.csv` est gitignoré (artefact daté, régénéré).
+
 **Principes d'architecture à ne jamais casser** (ils viennent de la SPEC) :
 1. Pas de score unique moyennant des signaux à demi-vies incompatibles — **cascade de portes**.
 2. `PATH` **ne crée aucune admission** : un titre non admis par socle+route n'entre jamais.

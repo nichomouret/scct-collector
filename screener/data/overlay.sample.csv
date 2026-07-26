@@ -1,0 +1,3 @@
+ticker,cause_class,permanence,expected_resolution_days,fv_low,fv_mid,fv_high,val_z,aqs,insider_buy,capi_effacee,impact_flux_actualise,net_debt_ebitda,recovery_precedents,net_cash_positive
+IBM,GUIDANCE_CUT,TRANSITORY,25,,,,,1.4,true,40000000000,10000000000,2.0,3,false
+MC.PA,SECTOR_CONTAGION,TRANSITORY,28,750,820,900,1.3,1.2,false,,,1.0,2,false
