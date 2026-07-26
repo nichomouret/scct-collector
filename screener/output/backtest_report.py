@@ -45,7 +45,8 @@ _CSS = """
 }
 .bt{background:var(--plane);color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5;
-  padding:clamp(16px,4vw,40px);max-width:1040px;margin:0 auto;}
+  min-height:100vh;padding:clamp(16px,4vw,40px);}
+.bt-inner{max-width:1040px;margin:0 auto;}
 .bt *{box-sizing:border-box;}
 .bt h1{font-size:clamp(22px,3.4vw,30px);margin:0 0 4px;letter-spacing:-.01em;text-wrap:balance;}
 .bt .sub{color:var(--ink2);margin:0 0 20px;font-size:15px;}
@@ -263,7 +264,7 @@ def render_html(result: dict, standalone: bool = True) -> str:
         f'<span><i style="background:{_SLOTS[i%len(_SLOTS)]}"></i>{_e(n)}</span>'
         for i, n in enumerate(sorted(result.get("exit_reasons", {}), key=lambda k: -result["exit_reasons"][k])))
 
-    body = f"""<div class="bt">
+    body = f"""<div class="bt"><div class="bt-inner">
 <h1>Backtest — screener de dislocation</h1>
 <p class="sub">Signal price-derived (proxy route A) · protocole §10 · dis_min {_e(result.get('config',{}).get('dis_min','?'))} · {_e(result.get('universe',''))}</p>
 <div class="verdict">{tag}<p>{verdict_txt}</p></div>
@@ -286,7 +287,7 @@ def render_html(result: dict, standalone: bool = True) -> str:
 <li><strong>Significativité</strong> — {m['n']} trades {'≥' if m['n']>=_trades_min(m['acceptance']) else '&lt;'} {_trades_min(m['acceptance'])} (§10.9) ; viser plusieurs centaines de small/mid pour conclure.</li>
 </ul>
 </footer>
-</div>"""
+</div></div>"""
 
     if not standalone:
         return f"<style>{_CSS}</style>\n{body}"
