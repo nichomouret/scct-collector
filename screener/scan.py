@@ -37,6 +37,12 @@ _DATA = os.path.join(_HERE, "data")
 _DEFAULT_INDEX = {"US": "^GSPC", "EU": "^STOXX50E", "IL": "^TA125.TA"}
 
 
+# Au-delà de ce résidu, on est presque sûrement face à une donnée aberrante
+# (split non ajusté, barre corrompue) et non à une vraie dislocation : un choc
+# réel dépasse rarement 8-10σ. On écarte pour ne pas polluer la short-list.
+_SANE_Z_MAX = 12.0
+
+
 @dataclass
 class ScanConfig:
     dis_min: float = 1.5
@@ -50,6 +56,8 @@ def scan_ticker(ticker: str, name: str, bars: List[PriceBar],
     if det.shock_idx is None or not det.fresh:
         return None
     if det.days_since_shock is None or det.days_since_shock > cfg.fresh_max_days:
+        return None
+    if abs(det.z_res_at_shock) > _SANE_Z_MAX:   # donnée aberrante (split/barre corrompue)
         return None
     if det.dis < cfg.dis_min:
         return None

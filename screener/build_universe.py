@@ -38,6 +38,10 @@ _UA = {"User-Agent": "screener research nm@nmgroup.be"}
 # décrochages (illiquidité) et de 404 côté Yahoo (§3.1).
 _KEEP_EXCHANGES = frozenset({"NYSE", "Nasdaq", "NYSE American", "NYSEArca", "CBOE"})
 _VALID = re.compile(r"^[A-Z][A-Z0-9.\-]{0,6}$")   # symboles Yahoo-compatibles
+# Suffixe de classe non-action-ordinaire : préférentielles (-P, -PK…), warrants
+# (-WT/-WS), units (-U), droits (-R/-RT). On garde les classes A/B (-A/-B) qui
+# sont des actions ordinaires (ex. BRK-B). §3.1.
+_EXCLUDE_SUFFIX = re.compile(r"-(P[A-Z]?|W[TS]?|U|RT?|CL)$")
 # Exclusions §3.1 (SPAC / Shell / warrants / units / preferreds) — heuristique nom.
 _EXCLUDE_NAME = re.compile(
     r"\b(ACQUISITION|WARRANT|UNITS?|RIGHTS?|DEPOSITARY|PREFERRED|SPAC|TRUST|"
@@ -69,6 +73,8 @@ def fetch_sec_tickers(timeout: int = 30) -> list:
         if exch not in _KEEP_EXCHANGES:
             continue
         if not _VALID.match(sym):
+            continue
+        if _EXCLUDE_SUFFIX.search(sym):        # préférentielles / warrants / units / droits
             continue
         if _EXCLUDE_NAME.search(name):
             continue

@@ -33,6 +33,17 @@ class TestScan(unittest.TestCase):
         self.assertTrue(c["tranche1_ok"])
         self.assertIsNotNone(c["stop_level"])
 
+    def test_aberrant_zres_excluded(self):
+        # baseline bruitée puis crash de -95 % sur la dernière barre → z_res aberrant
+        from screener.detection.path_archetype import PriceBar
+        mkt = [PriceBar(f"d{i}", 100, 100, 100, 100, 1e6) for i in range(80)]
+        px = []
+        for i in range(79):
+            c = 50 + (0.3 if i % 2 else -0.3)      # petite volatilité de base
+            px.append(PriceBar(f"d{i}", c, c, c, c, 1e6))
+        px.append(PriceBar("d79", 50, 50, 2.5, 2.5, 8e6))   # -95 % → z_res énorme
+        self.assertIsNone(scan_ticker("BAD", "Bad", px, mkt, ScanConfig(dis_min=1.0)))
+
     def test_old_shock_not_fresh(self):
         # choc ancien (à 40 séances) -> pas dans la short-list du jour
         bars, mkt = _series(n=180, shock_at=140, kind="recover")
