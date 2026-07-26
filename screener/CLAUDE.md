@@ -95,6 +95,24 @@ A/B/E, et qui devaient sinon être saisis à la main dans l'overlay. C'est
   dans `backtest/` — le modèle connaît le futur. Documenté dans le module.
 - Sans `ANTHROPIC_API_KEY`, tout dégrade → overlay manuel. `news.built.csv` gitignoré.
 
+## Tendance sociale (Adanos) — CONTEXTE, hors scoring
+
+⚠️ **Invariant à ne jamais casser** : la SPEC v1.1 a retiré le volet social du
+périmètre. Le social n'entre **ni dans `DIS`, ni dans la conviction, ni dans les
+routes, ni dans le socle**. Il joue le rôle des marchés prédictifs (§5.2,
+« ajuste le régime, pas le titre ») : un **contexte de qualification**.
+
+| Module | Rôle |
+|---|---|
+| `ingestion/social.py` | Client Adanos (env `ADANOS_API_KEY`, en-tête `X-API-Key`, endpoint `/v1/stock/{tk}`) → `SocialSignal` (buzz z, sentiment, tendance) ; parsing pur |
+| `build_social.py` | CLI univers → `social.built.csv` (drop-in `run.py --social` et `build_news --social`) |
+
+Deux usages : (1) **descriptif** — colonne `Social` de la short-list + bloc
+`CONTEXTE SOCIAL` de la fiche ; (2) **indice de cause + risque** — un pic de buzz
+(`z ≥ 3`) est passé au classifieur LLM (contexte) et ajoute un drapeau
+d'invalidation « cause possiblement rumeur/retail ». Champs `Candidate.social_*`
+(descriptifs). Test dédié : le social ne change RIEN au scoring. Snapshot gitignoré.
+
 **Principes d'architecture à ne jamais casser** (ils viennent de la SPEC) :
 1. Pas de score unique moyennant des signaux à demi-vies incompatibles — **cascade de portes**.
 2. `PATH` **ne crée aucune admission** : un titre non admis par socle+route n'entre jamais.

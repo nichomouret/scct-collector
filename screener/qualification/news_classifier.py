@@ -150,7 +150,8 @@ def passes_gating(c: NewsClassification) -> bool:
     return cond1 and cond2
 
 
-def _build_user_prompt(ticker: str, name: str, items: List[NewsItem]) -> str:
+def _build_user_prompt(ticker: str, name: str, items: List[NewsItem],
+                       social_hint: str = "") -> str:
     lines = [f"Titre : {name} ({ticker})", "", "News des 72 dernières heures :"]
     if not items:
         lines.append("  (aucune news trouvée)")
@@ -158,6 +159,9 @@ def _build_user_prompt(ticker: str, name: str, items: List[NewsItem]) -> str:
         lines.append(f"- {it.as_evidence()}")
         if it.description:
             lines.append(f"    {it.description}")
+    if social_hint:
+        lines.append("")
+        lines.append(f"Signal social (Adanos, contexte) : {social_hint}")
     lines.append("")
     lines.append("Classe la cause et estime la permanence et l'horizon de résolution.")
     return "\n".join(lines)
@@ -165,7 +169,7 @@ def _build_user_prompt(ticker: str, name: str, items: List[NewsItem]) -> str:
 
 def classify_news(ticker: str, name: str, items: List[NewsItem],
                   model: Optional[str] = None, api_key: Optional[str] = None,
-                  max_tokens: int = 1024) -> Optional[NewsClassification]:
+                  max_tokens: int = 1024, social_hint: str = "") -> Optional[NewsClassification]:
     """
     Appelle Claude en sortie structurée. Renvoie None si le SDK `anthropic` ou la
     clé sont absents (dégradation gracieuse → overlay manuel).
@@ -187,7 +191,7 @@ def classify_news(ticker: str, name: str, items: List[NewsItem],
             output_config={"effort": "low",
                            "format": {"type": "json_schema", "schema": _SCHEMA}},
             messages=[{"role": "user",
-                       "content": _build_user_prompt(ticker, name, items)}],
+                       "content": _build_user_prompt(ticker, name, items, social_hint)}],
         )
     except Exception:  # noqa: BLE001 — dégradation gracieuse (réseau, quota, refus)
         return None

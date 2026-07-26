@@ -129,6 +129,23 @@ def render(res: EvaluationResult) -> str:
         ok = c.float_utilization >= FLOAT_UTIL_THRESHOLD
         L.append(f"  {'✓' if ok else '✗'} utilisation du float ({c.float_utilization:.0%})")
 
+    # --- Contexte social (Adanos) — descriptif, hors scoring ---
+    if c.social_trend or c.social_buzz_z is not None or c.social_sentiment is not None:
+        bits = []
+        if c.social_trend:
+            bits.append(f"tendance {c.social_trend}")
+        if c.social_buzz_z is not None:
+            bits.append(f"buzz z={c.social_buzz_z:.1f}")
+        if c.social_sentiment is not None:
+            bits.append(f"sentiment {c.social_sentiment:+.2f}")
+        if c.social_mentions is not None:
+            bits.append(f"{c.social_mentions} mentions")
+        L.append("")
+        L.append("CONTEXTE SOCIAL (Adanos · hors scoring)")
+        L.append("  " + " · ".join(bits))
+        if c.social_buzz_z is not None and c.social_buzz_z >= 3.0:
+            L.append("  ⚠ pic de buzz : cause possiblement rumeur/retail — prudence")
+
     # --- Ce qui invalide la thèse (obligatoire) ---
     L.append("")
     L.append("CE QUI INVALIDE LA THÈSE                      ← obligatoire")
@@ -166,6 +183,8 @@ def _invalidations(res: EvaluationResult) -> List[str]:
         out.append("Confirmation de l'attaque par une source primaire → sortie")
     if Route.A in res.route_labels or Route.B in res.route_labels:
         out.append("Nouveau plus bas sous le point de capitulation → stop structurel")
+    if c.social_buzz_z is not None and c.social_buzz_z >= 3.0:
+        out.append("Pic de buzz social (Adanos) → vérifier cause rumeur/retail avant d'entrer")
     out.append("Dépassement de -15 % (MAE) → stop dur inconditionnel")
     out.append("40 séances atteintes → time-stop, sans exception")
     return out

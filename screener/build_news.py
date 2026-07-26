@@ -25,10 +25,39 @@ import time
 from typing import List
 
 from .ingestion.news import fetch_news
+from .ingestion.social import SocialSignal
 from .qualification.news_classifier import classify_news, passes_gating
 
 _HERE = os.path.dirname(__file__)
 _DATA = os.path.join(_HERE, "data")
+
+
+def _load_keyed(path):
+    if not path or not os.path.exists(path):
+        return {}
+    out = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            tk = (row.get("ticker") or "").strip().upper()
+            if tk:
+                out[tk] = row
+    return out
+
+
+def _social_hint(row) -> str:
+    """Reconstruit un indice social textuel depuis une ligne social.built.csv."""
+    if not row:
+        return ""
+    def f(k):
+        try:
+            return float(row[k]) if row.get(k) not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    def i(k):
+        v = f(k)
+        return int(v) if v is not None else None
+    return SocialSignal(ticker=row.get("ticker", ""), buzz_z=f("social_buzz_z"),
+                        sentiment=f("social_sentiment"), mentions=i("social_mentions")).hint()
 
 _OUT_COLS = ["ticker", "cause_class", "permanence", "expected_resolution_days",
              "cash_flow_impact_pct", "source_reliability", "confidence",
@@ -40,8 +69,9 @@ def _load_universe(path: str) -> List[dict]:
         return [r for r in csv.DictReader(f) if (r.get("ticker") or "").strip()]
 
 
-def build(universe_path: str, out_path: str, sleep_s: float) -> int:
+def build(universe_path: str, out_path: str, social_path: str, sleep_s: float) -> int:
     universe = _load_universe(universe_path)
+    social = _load_keyed(social_path)   # indice social passé au LLM (contexte)
     if not os.getenv("NEWS_API_KEY"):
         print("⚠ NEWS_API_KEY absent — aucune news récupérée.", file=sys.stderr)
     if not os.getenv("ANTHROPIC_API_KEY"):
@@ -54,7 +84,7 @@ def build(universe_path: str, out_path: str, sleep_s: float) -> int:
         name = (u.get("name") or tk).strip()
         query = f'"{name}"' if name and name != tk else tk
         items = fetch_news(query)
-        cls = classify_news(tk, name, items)
+        cls = classify_news(tk, name, items, social_hint=_social_hint(social.get(tk)))
         if cls is None:
             rows.append({c: "" for c in _OUT_COLS} | {"ticker": tk})
         else:
@@ -85,11 +115,13 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Classification de news LLM (P4, §5.3)")
     ap.add_argument("--universe", default=os.path.join(_DATA, "universe.sample.csv"))
     ap.add_argument("--out", default=os.path.join(_DATA, "news.built.csv"))
+    ap.add_argument("--social", default=os.path.join(_DATA, "social.built.csv"),
+                    help="tendance sociale (build_social) passée au LLM comme contexte")
     ap.add_argument("--sleep", type=float, default=1.0, help="pause entre titres (s)")
     args = ap.parse_args(argv)
     if not os.path.exists(args.universe):
         sys.exit(f"univers introuvable : {args.universe}")
-    return build(args.universe, args.out, args.sleep)
+    return build(args.universe, args.out, args.social, args.sleep)
 
 
 if __name__ == "__main__":

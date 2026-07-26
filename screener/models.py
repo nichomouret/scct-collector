@@ -181,6 +181,14 @@ class Candidate:
     permanence: Permanence = Permanence.UNKNOWN
     analysis: str = ""                   # analyse rédigée par Claude (§5.3, §8)
 
+    # --- Tendance sociale (Adanos) — CONTEXTE uniquement, hors scoring ---
+    # Ne participe ni à DIS ni à la conviction ni aux routes (SPEC v1.1 : social
+    # retiré du périmètre). Descriptif + drapeau de risque cause rumeur/retail.
+    social_buzz_z: Optional[float] = None
+    social_sentiment: Optional[float] = None
+    social_mentions: Optional[int] = None
+    social_trend: str = ""               # PIC / élevé / calme
+
     # --- Route B : sur-réaction ---
     capi_effacee: Optional[float] = None            # capitalisation effacée
     impact_flux_actualise: Optional[float] = None   # impact de flux actualisé (valeur absolue)

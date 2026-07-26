@@ -16,6 +16,7 @@ python -m screener.demo                          # imprime une fiche 1 page (don
 python -m screener.build_catalysts               # registre de catalyseurs (CT.gov + CSV) -> catalysts.built.csv
 ORTEX_API_KEY=xxx python -m screener.build_short_interest   # short interest / emprunt (Ortex) -> short_interest.built.csv
 NEWS_API_KEY=xxx ANTHROPIC_API_KEY=yyy python -m screener.build_news   # classification news LLM (§5.3) -> news.built.csv
+ADANOS_API_KEY=xxx python -m screener.build_social  # tendance sociale (contexte, hors scoring) -> social.built.csv
 python -m screener.run                            # tranche verticale : watchlist -> short-list (live)
 python -m screener.run --offline                 # idem, cache uniquement, aucun réseau
 ```

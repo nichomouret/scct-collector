@@ -68,13 +68,15 @@ def _market_symbol(uni: dict) -> str:
 
 
 def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optional[str],
-        short_interest_path: Optional[str], news_path: Optional[str], cache_dir: str,
-        standard_size: float, offline: bool, rng: str, show_all: bool) -> int:
+        short_interest_path: Optional[str], news_path: Optional[str],
+        social_path: Optional[str], cache_dir: str, standard_size: float,
+        offline: bool, rng: str, show_all: bool) -> int:
     universe = _load_universe(universe_path)
     catalysts = _load_keyed(catalysts_path)
     overlay = _load_keyed(overlay_path)
     short_interest = _load_keyed(short_interest_path)
     news = _load_keyed(news_path)   # cause_class/permanence/résolution (LLM, §5.3)
+    social = _load_keyed(social_path)   # tendance sociale Adanos — contexte, hors scoring
 
     market_cache: Dict[str, list] = {}
     results: List[EvaluationResult] = []
@@ -94,8 +96,9 @@ def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optiona
             errors.append(f"{tk}: {e}")
             continue
 
-        # News-derived (LLM) sous l'overlay manuel : l'humain a le dernier mot.
-        merged_overlay = {**(news.get(tk) or {}), **(overlay.get(tk) or {})}
+        # Contexte social + news LLM sous l'overlay manuel : l'humain a le dernier mot.
+        merged_overlay = {**(social.get(tk) or {}), **(news.get(tk) or {}),
+                          **(overlay.get(tk) or {})}
         bc = build_candidate(uni, bars, mkt,
                              catalyst_row=catalysts.get(tk), overlay=merged_overlay or None,
                              short_interest=short_interest.get(tk))
@@ -123,16 +126,17 @@ def _print_table(results: List[EvaluationResult], errors: List[str]) -> None:
     print(f"\nSHORT-LIST — {sum(r.admitted for r in results)} admis / {len(results)} évalués")
     print("-" * 78)
     print(f"{'Ticker':<10}{'Admis':>6}{'Routes':>10}{'n':>3}{'Conv':>6}"
-          f"{'Taille':>7}  {'Archétype':<16}{'DIS':>5}{'dsc':>5}")
-    print("-" * 78)
+          f"{'Taille':>7}  {'Archétype':<16}{'DIS':>5}{'dsc':>5}  {'Social':<7}")
+    print("-" * 86)
     for r in results:
         c = r.candidate
         routes = "".join(rt.value for rt in r.route_labels) or "-"
         arch = r.path.archetype.value if r.path.archetype else "-"
         dsc = c.days_since_shock if c.days_since_shock is not None else "-"
+        social = c.social_trend or "-"
         print(f"{c.ticker:<10}{'✓' if r.admitted else '·':>6}{routes:>10}{r.n_routes:>3}"
               f"{min(r.conviction.conv,10.0):>6.1f}{r.sizing.final_size:>7.2f}  "
-              f"{arch:<16}{c.dis:>5.1f}{str(dsc):>5}")
+              f"{arch:<16}{c.dis:>5.1f}{str(dsc):>5}  {social:<7}")
     if errors:
         print("\nErreurs d'ingestion :")
         for e in errors:
@@ -161,6 +165,8 @@ def main(argv=None) -> int:
                     help="snapshot Ortex (build_short_interest) ; absent = ignoré")
     ap.add_argument("--news", default=os.path.join(_DATA, "news.built.csv"),
                     help="classification news LLM (build_news, §5.3) ; absent = ignoré")
+    ap.add_argument("--social", default=os.path.join(_DATA, "social.built.csv"),
+                    help="tendance sociale Adanos (build_social) — contexte, hors scoring")
     ap.add_argument("--cache-dir", default=os.path.join(_HERE, ".cache"))
     ap.add_argument("--standard-size", type=float, default=1.0)
     ap.add_argument("--range", default="2y", help="fenêtre d'historique Yahoo (ex. 1y, 2y, 5y)")
@@ -172,8 +178,8 @@ def main(argv=None) -> int:
     if not os.path.exists(args.universe):
         sys.exit(f"univers introuvable : {args.universe}")
     return run(args.universe, args.catalysts, args.overlay, args.short_interest,
-               args.news, args.cache_dir, args.standard_size, args.offline,
-               args.range, args.show_all)
+               args.news, args.social, args.cache_dir, args.standard_size,
+               args.offline, args.range, args.show_all)
 
 
 if __name__ == "__main__":

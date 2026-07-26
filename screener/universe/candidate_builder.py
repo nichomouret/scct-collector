@@ -200,6 +200,11 @@ def build_candidate(uni: dict, bars: List[PriceBar], market_bars: List[PriceBar]
         cause_class=_enum(CauseClass, ov.get("cause_class")),
         permanence=_enum(Permanence, ov.get("permanence"), Permanence.UNKNOWN),
         analysis=(ov.get("analysis") or "").strip(),
+        # Tendance sociale (Adanos) — contexte, hors scoring
+        social_buzz_z=_f(ov.get("social_buzz_z")),
+        social_sentiment=_f(ov.get("social_sentiment")),
+        social_mentions=_i(ov.get("social_mentions")),
+        social_trend=(ov.get("social_trend") or "").strip(),
         # Socle S4 (overlay)
         fv_low=_f(ov.get("fv_low")), fv_mid=_f(ov.get("fv_mid")), fv_high=_f(ov.get("fv_high")),
         hard_stop_distance=_f(ov.get("hard_stop_distance")),
