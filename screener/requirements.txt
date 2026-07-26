@@ -1,0 +1,6 @@
+# Le cœur du screener (moteur de décision, détection, backtest, dashboard) est
+# 100 % stdlib. Ces dépendances ne servent QU'aux couches d'ingestion payantes ;
+# sans elles, chaque couche dégrade gracieusement (champs None), la chaîne tourne.
+
+requests>=2.31        # TwelveData, Ortex, NewsAPI, Adanos (appels HTTP)
+anthropic>=0.40       # classification de news + analyse par titre (§5.3, §8)
