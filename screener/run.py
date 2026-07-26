@@ -70,7 +70,8 @@ def _market_symbol(uni: dict) -> str:
 def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optional[str],
         short_interest_path: Optional[str], news_path: Optional[str],
         social_path: Optional[str], cache_dir: str, standard_size: float,
-        offline: bool, rng: str, show_all: bool) -> int:
+        offline: bool, rng: str, show_all: bool,
+        dashboard_path: Optional[str] = None) -> int:
     universe = _load_universe(universe_path)
     catalysts = _load_keyed(catalysts_path)
     overlay = _load_keyed(overlay_path)
@@ -119,6 +120,15 @@ def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optiona
         print(dossier.render(r))
     if not admitted:
         print("\n(aucun dossier admis aujourd'hui — normal : ~60-90 setups/an, §6.2)")
+
+    if dashboard_path:
+        from .output.dashboard import render_html
+        # Date de référence = dernière barre du marché chargé (proxy « au »).
+        as_of = next((mkt[-1].date for mkt in market_cache.values() if mkt), "")
+        uni_label = os.path.basename(universe_path)
+        with open(dashboard_path, "w") as f:
+            f.write(render_html(results, as_of=as_of, universe=uni_label, standalone=True))
+        print(f"\n-> tableau de bord : {dashboard_path}  (ouvrir/rafraîchir dans un navigateur)")
     return 0
 
 
@@ -173,13 +183,15 @@ def main(argv=None) -> int:
     ap.add_argument("--offline", action="store_true", help="cache uniquement, aucun réseau")
     ap.add_argument("--show-all", action="store_true",
                     help="imprime les fiches de tous les titres, pas seulement les admis")
+    ap.add_argument("--dashboard", default=None, metavar="PATH",
+                    help="écrit un tableau de bord HTML interactif (short-list à rafraîchir)")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.universe):
         sys.exit(f"univers introuvable : {args.universe}")
     return run(args.universe, args.catalysts, args.overlay, args.short_interest,
                args.news, args.social, args.cache_dir, args.standard_size,
-               args.offline, args.range, args.show_all)
+               args.offline, args.range, args.show_all, args.dashboard)
 
 
 if __name__ == "__main__":

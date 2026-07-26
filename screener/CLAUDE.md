@@ -20,6 +20,7 @@ Partie **déterministe et testable sans aucun flux payant** — roadmap P5 + cou
 | `detection/stabilization.py` | §7.3.2-3 | Score **STAB** + entrée par tranches |
 | `execution/exit_rules.py` | §7.4, §7.3.3 | **Time-stop 40 séances**, MAE, stop structurel |
 | `output/dossier.py` | §7.5 | Rendu de la **fiche 1 page** |
+| `output/dashboard.py` | §6.7, §7.5 | **Tableau de bord** interactif : short-list par route, filtres/tri, cartes dépliables (décision en 60 s). `run --dashboard PATH` ; aperçu `python -m screener.demo_dashboard` |
 | `engine.py` | §7 | Orchestrateur : socle → routes → conviction → taille → PATH |
 
 ## Backtest (P6, protocole §10) — le go/no-go chiffré
