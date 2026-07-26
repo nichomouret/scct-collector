@@ -179,6 +179,7 @@ class Candidate:
     # --- Qualification news (§5.3) ---
     cause_class: Optional[CauseClass] = None
     permanence: Permanence = Permanence.UNKNOWN
+    analysis: str = ""                   # analyse rédigée par Claude (§5.3, §8)
 
     # --- Route B : sur-réaction ---
     capi_effacee: Optional[float] = None            # capitalisation effacée

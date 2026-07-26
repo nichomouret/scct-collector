@@ -24,6 +24,8 @@ def _payload(**over):
         "expected_resolution_days": 25, "cash_flow_impact_pct": -12.0,
         "source_reliability": "TIER1_MEDIA", "confidence": 0.8,
         "evidence_urls": ["https://example.com/a"],
+        "analysis": "Baisse par contagion sectorielle sans dépôt réglementaire ; "
+                    "sur-réaction probable, risque = confirmation de la rumeur.",
     }
     d.update(over)
     return d
@@ -38,6 +40,7 @@ class TestParsing(unittest.TestCase):
         self.assertAlmostEqual(c.cash_flow_impact_pct, -12.0)
         self.assertAlmostEqual(c.confidence, 0.8)
         self.assertEqual(c.evidence_urls, ["https://example.com/a"])
+        self.assertIn("contagion", c.analysis)
 
     def test_parse_tolerates_garbage(self):
         c = parse_classification({"cause_class": "PAS_UNE_CLASSE", "permanence": "?",
@@ -79,6 +82,7 @@ class TestOverlayMapping(unittest.TestCase):
         self.assertEqual(row["permanence"], "TRANSITORY")
         self.assertEqual(row["expected_resolution_days"], 25)
         self.assertEqual(row["evidence_url"], "https://example.com/a")
+        self.assertIn("contagion", row["analysis"])
 
 
 class TestKeystoneIntegration(unittest.TestCase):

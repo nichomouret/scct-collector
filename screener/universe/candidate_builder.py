@@ -199,6 +199,7 @@ def build_candidate(uni: dict, bars: List[PriceBar], market_bars: List[PriceBar]
         # Qualification (overlay)
         cause_class=_enum(CauseClass, ov.get("cause_class")),
         permanence=_enum(Permanence, ov.get("permanence"), Permanence.UNKNOWN),
+        analysis=(ov.get("analysis") or "").strip(),
         # Socle S4 (overlay)
         fv_low=_f(ov.get("fv_low")), fv_mid=_f(ov.get("fv_mid")), fv_high=_f(ov.get("fv_high")),
         hard_stop_distance=_f(ov.get("hard_stop_distance")),

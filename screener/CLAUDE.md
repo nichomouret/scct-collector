@@ -79,13 +79,16 @@ A/B/E, et qui devaient sinon être saisis à la main dans l'overlay. C'est
 | Module | SPEC | Rôle |
 |---|---|---|
 | `ingestion/news.py` | §5.3 | NewsAPI (`NEWS_API_KEY`) → news 72h ; dégrade en `[]` sans clé |
-| `qualification/news_classifier.py` | §5.3 | Claude en **sortie structurée** (`output_config.format`) → `NewsClassification` + gating |
+| `qualification/news_classifier.py` | §5.3 | Claude en **sortie structurée** (`output_config.format`) → `NewsClassification` + gating + **analyse rédigée par titre** |
 | `build_news.py` | P4 | CLI univers → `news.built.csv` (format overlay, drop-in `run.py --news`) |
 
 - **Modèle** : SPEC §8 (« Sonnet pour le volume ») → défaut `claude-sonnet-5`,
   surchargé par `SCREENER_LLM_MODEL`. SDK `anthropic` (optionnel, `requirements.txt`).
 - **Précédence** : dans `run.py`, l'overlay manuel **écrase** le news LLM
   (`{**news, **overlay}`) — l'humain a le dernier mot.
+- **Analyse par titre** : le même appel produit un champ `analysis` (2-3 phrases)
+  rendu dans la fiche (`ANALYSE (Claude)`) et dans `run` (`ANALYSE CLAUDE PAR TITRE`,
+  pour chaque titre). Circule via l'overlay → `Candidate.analysis` → `dossier`.
 - **Gating (§5.3)** : `cause ∈ {transitoires}` OU `permanence=TRANSITORY`, ET
   `expected_resolution_days ≤ 40`.
 - ⚠️ **Garde anti-fuite LLM (§10.3)** : live/forward uniquement. NE PAS brancher

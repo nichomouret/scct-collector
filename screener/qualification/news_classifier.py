@@ -54,19 +54,25 @@ _SCHEMA = {
         "source_reliability": {"type": "string", "enum": _SOURCE_RELIABILITY},
         "confidence": {"type": "number"},
         "evidence_urls": {"type": "array", "items": {"type": "string"}},
+        "analysis": {"type": "string"},
     },
     "required": ["cause_class", "permanence", "expected_resolution_days",
-                 "cash_flow_impact_pct", "source_reliability", "confidence", "evidence_urls"],
+                 "cash_flow_impact_pct", "source_reliability", "confidence",
+                 "evidence_urls", "analysis"],
     "additionalProperties": False,
 }
 
 _SYSTEM = (
     "Tu es un analyste actions spécialisé en situations spéciales et event-driven. "
     "On te donne les news/communiqués récents (72h) sur un titre qui vient de "
-    "décrocher. Classe la CAUSE du décrochage et estime si la dislocation est "
-    "transitoire et à quel horizon (en séances) elle se résout. Sois calibré : "
-    "réponds UNKNOWN / NO_IDENTIFIED_CAUSE plutôt que d'inventer une cause. "
-    "N'utilise que l'information fournie ; ne suppose aucune connaissance postérieure."
+    "décrocher. (1) Classe la CAUSE du décrochage et estime si la dislocation est "
+    "transitoire et à quel horizon (en séances) elle se résout. (2) Rédige une "
+    "ANALYSE concise (2-3 phrases, français) : ce qui s'est passé, pourquoi c'est "
+    "— ou n'est pas — une dislocation exploitable à horizon court, et le principal "
+    "risque d'invalidation. Sois calibré et factuel : réponds UNKNOWN / "
+    "NO_IDENTIFIED_CAUSE plutôt que d'inventer une cause, et dis-le si les news ne "
+    "montrent pas de dislocation. N'utilise que l'information fournie ; ne suppose "
+    "aucune connaissance postérieure."
 )
 
 
@@ -79,6 +85,7 @@ class NewsClassification:
     source_reliability: str
     confidence: float
     evidence_urls: List[str] = field(default_factory=list)
+    analysis: str = ""          # analyse rédigée par Claude (2-3 phrases)
 
     def as_overlay_row(self, ticker: str) -> dict:
         """Ligne au format overlay consommé par `screener.run`."""
@@ -93,6 +100,7 @@ class NewsClassification:
             "source_reliability": self.source_reliability,
             "confidence": self.confidence,
             "evidence_url": self.evidence_urls[0] if self.evidence_urls else "",
+            "analysis": self.analysis,
         }
 
 
@@ -126,6 +134,7 @@ def parse_classification(data: dict) -> NewsClassification:
         source_reliability=str(data.get("source_reliability") or "TIER2_MEDIA"),
         confidence=num("confidence") or 0.0,
         evidence_urls=list(data.get("evidence_urls") or []),
+        analysis=str(data.get("analysis") or "").strip(),
     )
 
 

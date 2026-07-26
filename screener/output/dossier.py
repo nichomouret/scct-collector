@@ -9,6 +9,7 @@ et surtout la section « ce qui invalide la thèse » — obligatoire.
 """
 from __future__ import annotations
 
+import textwrap
 from typing import List
 
 from ..engine import EvaluationResult
@@ -94,6 +95,13 @@ def render(res: EvaluationResult) -> str:
             ratio = c.upside_thesis_pct / cat.expected_move_pct
             flag = "✓" if ratio > 1.5 else "✗"
             L.append(f"  Upside thèse : +{c.upside_thesis_pct:.0f} %   →  ratio {ratio:.1f}×  {flag}")
+
+    # --- Analyse Claude (§5.3, §8) ---
+    if c.analysis:
+        L.append("")
+        L.append("ANALYSE (Claude)")
+        for line in textwrap.wrap(c.analysis, width=61):
+            L.append(f"  {line}")
 
     # --- Pourquoi c'est une dislocation ---
     L.append("")

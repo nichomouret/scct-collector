@@ -40,6 +40,13 @@ def build_example() -> Candidate:
         catalyst=cat, pms=0.24, upside_thesis_pct=32.0, scenario_documented=True,
         # Confirmations
         aqs=1.4, insider_buy=True,
+        # Analyse Claude (§5.3, §8) — normalement produite par le classifieur LLM
+        analysis="Décrochage de -20 % par contagion sectorielle, sans dépôt "
+                 "réglementaire ni révision fondamentale : la capitalisation "
+                 "effacée (400 M€) est sans commune mesure avec l'impact de flux "
+                 "estimé (60 M€), d'où une sur-réaction de 6,7×. Le catalyseur S1 "
+                 "du 15/09 tranche à horizon court ; principal risque = "
+                 "confirmation de la rumeur par une source primaire.",
     )
 
 

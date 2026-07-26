@@ -25,6 +25,7 @@ import argparse
 import csv
 import os
 import sys
+import textwrap
 from typing import Dict, List, Optional
 
 from .ingestion.prices import PriceFetchError, load_bars
@@ -106,6 +107,7 @@ def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optiona
     # Tri : admis d'abord, puis par conviction décroissante.
     results.sort(key=lambda r: (r.admitted, r.conviction.conv), reverse=True)
     _print_table(results, errors)
+    _print_analyses(results)
 
     admitted = [r for r in results if r.admitted]
     to_show = results if show_all else admitted
@@ -135,6 +137,19 @@ def _print_table(results: List[EvaluationResult], errors: List[str]) -> None:
         print("\nErreurs d'ingestion :")
         for e in errors:
             print(f"  ! {e}")
+
+
+def _print_analyses(results: List[EvaluationResult]) -> None:
+    """Analyse Claude par titre (§5.3, §8) — pour chaque titre qui en a une."""
+    with_analysis = [r for r in results if r.candidate.analysis]
+    if not with_analysis:
+        return
+    print("\nANALYSE CLAUDE PAR TITRE")
+    print("-" * 78)
+    for r in with_analysis:
+        print(f"{r.candidate.ticker} :")
+        for line in textwrap.wrap(r.candidate.analysis, width=74):
+            print(f"  {line}")
 
 
 def main(argv=None) -> int:

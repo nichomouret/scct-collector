@@ -32,7 +32,7 @@ _DATA = os.path.join(_HERE, "data")
 
 _OUT_COLS = ["ticker", "cause_class", "permanence", "expected_resolution_days",
              "cash_flow_impact_pct", "source_reliability", "confidence",
-             "evidence_url", "gating"]
+             "evidence_url", "analysis", "gating"]
 
 
 def _load_universe(path: str) -> List[dict]:
