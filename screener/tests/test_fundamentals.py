@@ -11,6 +11,7 @@ import unittest
 
 from screener.ingestion.fundamentals import (
     Fundamentals, fetch_fundamentals, fundamentals_from_payloads,
+    parse_sec_shares, sec_fundamentals,
 )
 
 
@@ -63,6 +64,47 @@ class TestFundamentalsParsing(unittest.TestCase):
                                        {"close": ""})
         self.assertIsNone(f.market_cap)
         self.assertIsNone(f.price)
+
+
+class TestSECSource(unittest.TestCase):
+    _CONCEPT = {"units": {"shares": [
+        {"val": 900, "end": "2025-12-31"},
+        {"val": 1000, "end": "2026-04-17"},   # plus récent → retenu
+        {"val": 950, "end": "2026-01-15"},
+    ]}}
+
+    def test_parse_sec_shares_picks_latest(self):
+        self.assertEqual(parse_sec_shares(self._CONCEPT), 1000.0)
+
+    def test_parse_sec_shares_empty(self):
+        self.assertIsNone(parse_sec_shares({"units": {}}))
+        self.assertIsNone(parse_sec_shares(None))
+
+    def test_sec_fundamentals_market_cap_is_shares_times_price(self):
+        # patch fetch_sec_shares pour rester hors ligne
+        import screener.ingestion.fundamentals as F
+        old = F.fetch_sec_shares
+        F.fetch_sec_shares = lambda cik, timeout=25: 1000.0
+        try:
+            f = sec_fundamentals("AAPL", price=10.0, cik_map={"AAPL": 320193})
+            self.assertEqual(f.market_cap, 10_000.0)   # 1000 × 10
+            self.assertEqual(f.shares_outstanding, 1000.0)
+        finally:
+            F.fetch_sec_shares = old
+
+    def test_sec_fundamentals_none_when_ticker_absent(self):
+        f = sec_fundamentals("NOTINSEC", price=10.0, cik_map={"AAPL": 320193})
+        self.assertIsNone(f.market_cap)
+
+    def test_sec_fundamentals_none_without_price(self):
+        import screener.ingestion.fundamentals as F
+        old = F.fetch_sec_shares
+        F.fetch_sec_shares = lambda cik, timeout=25: 1000.0
+        try:
+            f = sec_fundamentals("AAPL", price=None, cik_map={"AAPL": 320193})
+            self.assertIsNone(f.market_cap)
+        finally:
+            F.fetch_sec_shares = old
 
 
 if __name__ == "__main__":

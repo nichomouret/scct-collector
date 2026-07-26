@@ -66,7 +66,7 @@ def fetch_sec_tickers(timeout: int = 30) -> list:
 
 
 def build(out_path: str, sample: int, skip_top: int, seed: int,
-          target_position_value: float) -> int:
+          target_position_value: float, default_coverage: str = "") -> int:
     try:
         allsyms = fetch_sec_tickers()
     except Exception as e:  # noqa: BLE001
@@ -86,7 +86,7 @@ def build(out_path: str, sample: int, skip_top: int, seed: int,
         for sym, name in picked:
             w.writerow({
                 "ticker": sym, "symbol": sym, "name": name, "sector": "",
-                "region": "US", "market_cap": "", "analyst_coverage": "",
+                "region": "US", "market_cap": "", "analyst_coverage": default_coverage,
                 "target_position_value": target_position_value,
                 "market_index": "^GSPC", "sponsor": "",
             })
@@ -106,9 +106,12 @@ def main(argv=None) -> int:
                     help="nombre de méga/large caps à sauter (viser small/mid)")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--target-position-value", type=float, default=1_000_000)
+    ap.add_argument("--default-coverage", default="",
+                    help="valeur d'analyst_coverage par défaut (S1) — ex. 3 pour "
+                         "TESTER la chaîne ; TwelveData/SEC ne fournissent pas ce champ")
     args = ap.parse_args(argv)
     return build(args.out, args.sample, args.skip_top, args.seed,
-                 args.target_position_value)
+                 args.target_position_value, args.default_coverage)
 
 
 if __name__ == "__main__":

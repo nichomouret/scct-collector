@@ -68,12 +68,13 @@ Bout à bout, données réelles gratuites — de la watchlist à la short-list :
 Cache dans `screener/.cache/` (gitignoré). Sans overlay/catalyseur, un décrochage
 échoue le socle S3 — voulu : un décrochage de prix n'est pas un dossier.
 
-**Éligibilité S1 (TwelveData)** : `ingestion/fundamentals.py` + `build_fundamentals.py`
-récupèrent la **capitalisation** (et le cours) laissée vide par `build_universe`,
-écrites dans `fundamentals.built.csv` → `run --fundamentals`. `run` ne remplit
-que les champs VIDES de l'univers (l'univers statique garde la priorité). C'est
-ce qui permet à `run` d'ADMETTRE des candidats sur un univers SEC. ⚠ TwelveData
-n'expose pas le nombre d'analystes → `analyst_coverage` (S1) reste dans l'univers.
+**Éligibilité S1 (capitalisation)** : `ingestion/fundamentals.py` + `build_fundamentals.py`
+comblent la **capitalisation** laissée vide par `build_universe` → `fundamentals.built.csv`
+→ `run --fundamentals` (ne remplit que les champs VIDES ; l'univers garde la priorité).
+Deux sources : **`sec` (défaut, SANS clé)** = actions SEC XBRL × cours Yahoo ; **`twelvedata`**
+= `/statistics`, **plan pro requis** (l'offre gratuite TwelveData refuse cet endpoint —
+d'où le défaut SEC). ⚠ Aucune source ne donne le nombre d'analystes → `analyst_coverage`
+(S1) via `build_universe --default-coverage 3` (test) ou renseigné à la main.
 Le dashboard interactif s'obtient avec `run --dashboard shortlist.html`.
 
 ## Registre de catalyseurs (P1 — module central §3.2)
