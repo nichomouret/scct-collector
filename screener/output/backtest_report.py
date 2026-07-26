@@ -27,21 +27,21 @@ _CSS = """
   --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
   --pos:#2a78d6; --neg:#e34948;
-  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b; --up:#006300; --down:#d03b3b;
 }
 @media (prefers-color-scheme:dark){ :root:where(:not([data-theme=light])) .bt{
   color-scheme:dark;
   --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
   --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
-  --pos:#3987e5; --neg:#e66767;
+  --pos:#3987e5; --neg:#e66767; --up:#0ca30c; --down:#e66767;
 }}
 :root[data-theme=dark] .bt{
   color-scheme:dark;
   --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
   --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
-  --pos:#3987e5; --neg:#e66767;
+  --pos:#3987e5; --neg:#e66767; --up:#0ca30c; --down:#e66767;
 }
 .bt{background:var(--plane);color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5;
@@ -81,6 +81,12 @@ _CSS = """
 .bt .legend i{width:11px;height:11px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px;}
 .bt footer{border-top:1px solid var(--grid);padding-top:16px;color:var(--muted);font-size:12.5px;}
 .bt footer ul{margin:8px 0 0;padding-left:18px;} .bt footer li{margin:3px 0;}
+.bt .tlog{max-height:430px;overflow:auto;border-radius:12px;border:1px solid var(--border);}
+.bt .tlog table{border-collapse:separate;border-spacing:0;}
+.bt .tlog thead th{position:sticky;top:0;background:var(--surface);z-index:1;}
+.bt .tlog td.up{color:var(--up);font-weight:600;} .bt .tlog td.down{color:var(--down);font-weight:600;}
+.bt .tlog td.tk{font-weight:600;color:var(--ink);}
+.bt .win{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px;}
 """
 
 _SLOTS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)"]
@@ -238,6 +244,25 @@ def _routes_table(routes: Dict[str, dict], min_route: int) -> str:
             f'<tbody>{"".join(rows)}</tbody></table>')
 
 
+def _trades_table(trades: List[dict]) -> str:
+    rows = sorted(trades, key=lambda t: t.get("entry_date", ""))
+    trs = []
+    for t in rows:
+        r = float(t.get("net_return", 0.0))
+        cls = "up" if r >= 0 else "down"
+        dot = "var(--up)" if r >= 0 else "var(--down)"
+        trs.append(
+            f'<tr><td class="tk"><span class="win" style="background:{dot}"></span>{_e(t.get("ticker"))}</td>'
+            f'<td>{_e(t.get("entry_date"))}</td><td>{_e(t.get("exit_date"))}</td>'
+            f'<td>{_e(t.get("sessions_held"))}</td>'
+            f'<td class="{cls}">{r*100:+.1f}%</td><td>{_e(t.get("exit_reason"))}</td></tr>')
+    if not trs:
+        return '<p class="cap" style="padding:16px">Aucun trade.</p>'
+    return ('<div class="tlog"><table><thead><tr><th>Ticker</th><th>Entrée</th>'
+            '<th>Sortie</th><th>Séances</th><th>Rdt net</th><th>Motif</th></tr></thead>'
+            f'<tbody>{"".join(trs)}</tbody></table></div>')
+
+
 def render_html(result: dict, standalone: bool = True) -> str:
     m = result["metrics"]
     passed = all(m["acceptance"].values())
@@ -279,6 +304,8 @@ def render_html(result: dict, standalone: bool = True) -> str:
 </section>
 <section><h2>Décomposition par route <span style="color:var(--muted);font-weight:400">(§10.11 · min {min_route} trades)</span></h2>
 <div class="card">{_routes_table(result.get('routes', {}), min_route)}</div></section>
+<section><h2>Journal des trades <span style="color:var(--muted);font-weight:400">({len(result.get('trades', []))} lignes · vert = gain, rouge = perte)</span></h2>
+{_trades_table(result.get('trades', []))}</section>
 <footer>
 <strong>À lire avec ces garde-fous.</strong>
 <ul>

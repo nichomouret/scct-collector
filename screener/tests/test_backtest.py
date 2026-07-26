@@ -232,6 +232,8 @@ class TestReport(unittest.TestCase):
         self.assertIn("No-go", h)
         self.assertIn("bat toutefois le placebo", h)   # signal > placebo callout
         self.assertIn("<svg", h)                        # au moins un graphique
+        self.assertIn("Journal des trades", h)          # liste des titres tradés
+        self.assertIn("</td>", h)                        # lignes de trades
         self.assertIn("Biais de survivance", h)         # garde-fous
         self.assertIn("✗", h)                            # pastille d'échec
 
