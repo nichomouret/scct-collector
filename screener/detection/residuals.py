@@ -62,6 +62,18 @@ def _ols(xs: List[float], ys: List[float]):
     return (my - beta * mx, beta)
 
 
+def dislocation_score(z_at_shock: float, days_since: int, n_confirmers: int) -> float:
+    """
+    DIS = |z_res| × (1 + 0.15 × Σ confirmateurs) × decay(jours_depuis_choc) (§4.4).
+
+    Extrait pour que la couche d'assemblage recompute DIS avec la totalité des
+    confirmateurs (§4.3), pas seulement ceux dérivables des prix : le z-volume
+    vient des prix, mais le saut du taux d'emprunt et l'utilisation du float
+    viennent d'Ortex, et l'achat d'initié d'un dépôt réglementaire.
+    """
+    return abs(z_at_shock) * (1 + 0.15 * n_confirmers) * exp(-days_since / 3.0)
+
+
 def _z_volume(bars: List[PriceBar]) -> float:
     if len(bars) < 21:
         return 0.0
@@ -121,8 +133,9 @@ def compute_detection(bars: List[PriceBar], market_bars: List[PriceBar]) -> Dete
     z_at_shock = zres[shock_date]
     fresh = days_since <= FRESH_MAX_SESSIONS
     # Confirmateurs de flux disponibles depuis les prix seuls : z-volume (§4.3).
+    # La couche d'assemblage recompute DIS avec les confirmateurs Ortex/initiés.
     confirmers = 1 if z_vol >= 3.0 else 0
-    dis = abs(z_at_shock) * (1 + 0.15 * confirmers) * exp(-days_since / 3.0)
+    dis = dislocation_score(z_at_shock, days_since, confirmers)
 
     # Index de la barre du choc dans `bars`.
     shock_idx = next((i for i, b in enumerate(bars) if b.date == shock_date), None)

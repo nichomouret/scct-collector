@@ -53,6 +53,22 @@ colonne `sponsor`), sinon un nom non-santé ramènerait des études sans rapport
 `--as-of` rend le registre rejouable en point-in-time (indispensable au backtest P6).
 `catalysts.built.csv` est gitignoré (artefact daté, régénéré).
 
+## Short interest / emprunt (Ortex, §4.3, Phase 2)
+
+Deux confirmateurs de flux à ★★★ que les prix seuls ne donnent pas — **saut du
+taux d'emprunt > +200 bps/3j** et **utilisation du float > 90 %** — plus les
+lignes short interest / coût d'emprunt / DTC de la fiche (§7.5).
+
+| Module | SPEC | Rôle |
+|---|---|---|
+| `ingestion/short_interest.py` | §4.3 | Client Ortex (env `ORTEX_API_KEY`/`ORTEX_BASE`, en-tête `Ortex-Api-Key`, endpoint `/short_interest`) ; parsing pur + `flow_confirmers()` |
+| `build_short_interest.py` | Phase 2 | CLI univers → `short_interest.built.csv` (drop-in pour `run.py --short-interest`) |
+
+Conventions alignées sur `ortex_c4_pull.py` (racine). Ces confirmateurs sont
+recomptés dans le builder et **rehaussent `DIS`** via `dislocation_score()`
+(§4.4) : `DIS = |z_res|·(1+0.15·Σconfirmateurs)·decay`. Sans clé, tout dégrade
+en `None` et `DIS` retombe sur le seul z-volume. Snapshot gitignoré.
+
 **Principes d'architecture à ne jamais casser** (ils viennent de la SPEC) :
 1. Pas de score unique moyennant des signaux à demi-vies incompatibles — **cascade de portes**.
 2. `PATH` **ne crée aucune admission** : un titre non admis par socle+route n'entre jamais.

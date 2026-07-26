@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import List
 
 from ..engine import EvaluationResult
+from ..ingestion.short_interest import BORROW_JUMP_BPS_THRESHOLD, FLOAT_UTIL_THRESHOLD
 from ..models import LossBoundMechanism, Route
 
 _ROUTE_NAME = {
@@ -113,6 +114,12 @@ def render(res: EvaluationResult) -> str:
     L.append(f"  {'✓' if c.insider_buy else '✗'} achat d'initié")
     L.append(f"  {'✓' if (c.pms is not None and abs(c.pms) >= 0.20) else '✗'} "
              f"différentiel marché prédictif (PMS = {c.pms})")
+    if c.borrow_jump_bps_3d is not None:
+        ok = c.borrow_jump_bps_3d >= BORROW_JUMP_BPS_THRESHOLD
+        L.append(f"  {'✓' if ok else '✗'} saut du taux d'emprunt ({c.borrow_jump_bps_3d:+.0f} bps/3j)")
+    if c.float_utilization is not None:
+        ok = c.float_utilization >= FLOAT_UTIL_THRESHOLD
+        L.append(f"  {'✓' if ok else '✗'} utilisation du float ({c.float_utilization:.0%})")
 
     # --- Ce qui invalide la thèse (obligatoire) ---
     L.append("")
@@ -123,6 +130,17 @@ def render(res: EvaluationResult) -> str:
     # --- Positionnement & sortie ---
     L.append("")
     L.append("POSITIONNEMENT & SORTIE")
+    si_bits = []
+    if c.short_interest_pct is not None:
+        si_bits.append(f"Short interest {c.short_interest_pct:.1%}")
+    if c.float_utilization is not None:
+        si_bits.append(f"Utilisation float {c.float_utilization:.0%}")
+    if c.borrow_fee is not None:
+        si_bits.append(f"Coût emprunt {c.borrow_fee:.1%}")
+    if c.days_to_cover is not None:
+        si_bits.append(f"DTC {c.days_to_cover:.1f}")
+    if si_bits:
+        L.append("  " + " · ".join(si_bits))
     if c.days_of_adv is not None:
         L.append(f"  Position cible : {c.target_position_value:.0f} = {c.days_of_adv:.1f} j d'ADV  "
                  f"{'✓' if c.days_of_adv <= 2 else '✗'}")

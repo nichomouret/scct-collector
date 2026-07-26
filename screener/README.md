@@ -14,12 +14,16 @@ d'architecture : [`CLAUDE.md`](CLAUDE.md).
 python -m unittest discover -s screener/tests   # 45 tests, stdlib uniquement
 python -m screener.demo                          # imprime une fiche 1 page (données synthétiques)
 python -m screener.build_catalysts               # registre de catalyseurs (CT.gov + CSV) -> catalysts.built.csv
+ORTEX_API_KEY=xxx python -m screener.build_short_interest   # short interest / emprunt (Ortex) -> short_interest.built.csv
 python -m screener.run                            # tranche verticale : watchlist -> short-list (live)
 python -m screener.run --offline                 # idem, cache uniquement, aucun réseau
 ```
 
-Chaîne complète : `build_catalysts` (P1) produit `data/catalysts.built.csv`, que
-`run` consomme via `--catalysts data/catalysts.built.csv`.
+Chaîne complète : `build_catalysts` (P1) et `build_short_interest` (Ortex, §4.3)
+produisent des CSV que `run` consomme via `--catalysts` / `--short-interest`.
+Ortex fournit deux confirmateurs de flux (saut du taux d'emprunt, utilisation du
+float) qui rehaussent `DIS` et remplissent la section POSITIONNEMENT de la fiche.
+Sans `ORTEX_API_KEY`, la chaîne tourne quand même (DIS = z-volume seul).
 
 ## Tranche verticale (`screener.run`)
 

@@ -169,6 +169,13 @@ class Candidate:
     days_since_shock: Optional[int] = None
     negative_filing_72h: bool = False
 
+    # --- Short interest / emprunt (Ortex, §4.3) ---
+    short_interest_pct: Optional[float] = None   # % du free float (fraction)
+    borrow_fee: Optional[float] = None           # cost-to-borrow (fraction)
+    float_utilization: Optional[float] = None    # 0-1
+    borrow_jump_bps_3d: Optional[float] = None   # saut du taux d'emprunt sur 3j (bps)
+    days_to_cover: Optional[float] = None
+
     # --- Qualification news (§5.3) ---
     cause_class: Optional[CauseClass] = None
     permanence: Permanence = Permanence.UNKNOWN

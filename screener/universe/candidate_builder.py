@@ -28,8 +28,11 @@ from ..models import (
     Candidate, Catalyst, CatalystPower, CauseClass, DateCertainty, Permanence, Region,
 )
 from ..detection.path_archetype import PriceBar, classify_archetype
-from ..detection.residuals import DetectionResult, compute_detection
+from ..detection.residuals import DetectionResult, compute_detection, dislocation_score
 from ..detection.stabilization import StabFeatures
+from ..ingestion.short_interest import (
+    ShortInterestSignals, flow_confirmers, signals_from_payloads,
+)
 from ..models import Archetype
 
 
@@ -126,12 +129,29 @@ def _catalyst_from_row(row: Optional[dict]) -> Optional[Catalyst]:
     )
 
 
+def _signals_from_row(ticker: str, row: Optional[dict]) -> Optional[ShortInterestSignals]:
+    """Reconstruit des signaux Ortex depuis une ligne CSV (build_short_interest)."""
+    if not row:
+        return None
+    return ShortInterestSignals(
+        ticker=ticker.upper(),
+        short_interest_pct=_f(row.get("short_interest_pct")),
+        borrow_fee=_f(row.get("borrow_fee")),
+        float_utilization=_f(row.get("float_utilization")),
+        borrow_jump_bps_3d=_f(row.get("borrow_jump_bps_3d")),
+        days_to_cover=_f(row.get("days_to_cover")),
+        as_of=row.get("as_of", ""),
+    )
+
+
 def build_candidate(uni: dict, bars: List[PriceBar], market_bars: List[PriceBar],
                     catalyst_row: Optional[dict] = None,
-                    overlay: Optional[dict] = None) -> BuiltCandidate:
+                    overlay: Optional[dict] = None,
+                    short_interest: Optional[dict] = None) -> BuiltCandidate:
     ov = overlay or {}
     det = compute_detection(bars, market_bars)
     catalyst = _catalyst_from_row(catalyst_row)
+    sig = _signals_from_row(uni.get("ticker", ""), short_interest)
 
     price = bars[-1].close
     adv_20d = mean(b.close * b.volume for b in bars[-20:]) if len(bars) >= 20 else \
@@ -144,9 +164,17 @@ def build_candidate(uni: dict, bars: List[PriceBar], market_bars: List[PriceBar]
 
     # Archétype / STAB seulement si un choc daté a été localisé.
     archetype = stab_feats = None
+    dis = det.dis
     if det.shock_idx is not None:
         archetype = classify_archetype(bars, det.shock_idx)
         stab_feats = stab_features_from_bars(bars, det.shock_idx)
+        # Recompute DIS avec la TOTALITÉ des confirmateurs (§4.3) : z-volume
+        # (prix) + saut d'emprunt / utilisation du float (Ortex) + achat d'initié.
+        price_conf = 1 if det.z_volume >= 3.0 else 0
+        ortex_conf, _ = flow_confirmers(sig)
+        insider_conf = 1 if _b(ov.get("insider_buy")) else 0
+        dis = dislocation_score(det.z_res_at_shock, det.days_since_shock or 0,
+                                price_conf + ortex_conf + insider_conf)
 
     c = Candidate(
         ticker=uni.get("ticker", ""), name=uni.get("name", ""),
@@ -158,10 +186,16 @@ def build_candidate(uni: dict, bars: List[PriceBar], market_bars: List[PriceBar]
         listing_age_days=len(bars),
         target_position_value=_f(uni.get("target_position_value")) or 0.0,
         expected_resolution_days=resolution,
-        # Détection (prix)
-        dis=det.dis, z_res=det.z_res_at_shock, z_volume=det.z_volume,
+        # Détection (prix + confirmateurs)
+        dis=dis, z_res=det.z_res_at_shock, z_volume=det.z_volume,
         days_since_shock=det.days_since_shock,
         negative_filing_72h=_b(ov.get("negative_filing_72h")),
+        # Short interest / emprunt (Ortex, §4.3)
+        short_interest_pct=(sig.short_interest_pct if sig else None),
+        borrow_fee=(sig.borrow_fee if sig else None),
+        float_utilization=(sig.float_utilization if sig else None),
+        borrow_jump_bps_3d=(sig.borrow_jump_bps_3d if sig else None),
+        days_to_cover=(sig.days_to_cover if sig else None),
         # Qualification (overlay)
         cause_class=_enum(CauseClass, ov.get("cause_class")),
         permanence=_enum(Permanence, ov.get("permanence"), Permanence.UNKNOWN),
