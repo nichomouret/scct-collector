@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .ingestion.prices import PriceFetchError, load_bars
 from .detection.path_archetype import PriceBar
@@ -69,8 +70,36 @@ def _split_oos(trades: List[Trade]) -> Tuple[List[Trade], List[Trade]]:
     return ordered[:cut], ordered[cut:]
 
 
+def _metrics_dict(m: M.Metrics, min_trades: int) -> dict:
+    return {
+        "n": m.n, "hit_rate": m.hit_rate, "gain_loss_ratio": m.gain_loss_ratio,
+        "mean_return": m.mean_return, "sharpe_annual": m.sharpe_annual,
+        "sharpe_per_trade": m.sharpe_per_trade, "max_drawdown": m.max_drawdown,
+        "trades_per_year": m.trades_per_year, "acceptance": m.acceptance(min_trades),
+    }
+
+
+def _build_result(trades, m, routes, placebo_sharpe, reasons, cfg, universe_path,
+                  rng, n_titres) -> dict:
+    return {
+        "universe": os.path.basename(universe_path), "range": rng, "n_titres": n_titres,
+        "config": {"dis_min": cfg.dis_min, "target_pct": cfg.target_pct},
+        "metrics": _metrics_dict(m, M.TRADES_MIN),
+        "routes": {r: _metrics_dict(rm, M.TRADES_PER_ROUTE_MIN)
+                   for r, rm in routes.items()},
+        "min_route_trades": M.TRADES_PER_ROUTE_MIN,
+        "placebo_sharpe": placebo_sharpe,
+        "exit_reasons": reasons,
+        "trades": [{"ticker": t.ticker, "route": t.route, "entry_date": t.entry_date,
+                    "exit_date": t.exit_date, "net_return": t.net_return,
+                    "gross_return": t.gross_return, "sessions_held": t.sessions_held,
+                    "exit_reason": t.exit_reason} for t in trades],
+    }
+
+
 def run(universe_path: str, offline: bool, rng: str, cache_dir: str,
-        cfg: BacktestConfig) -> int:
+        cfg: BacktestConfig, html_path: Optional[str] = None,
+        json_path: Optional[str] = None) -> int:
     universe = _load_universe(universe_path)
     market_cache: Dict[str, list] = {}
     data: Dict[str, Tuple[List[PriceBar], List[PriceBar]]] = {}
@@ -103,8 +132,9 @@ def run(universe_path: str, offline: bool, rng: str, cache_dir: str,
     for line in _fmt_metrics(m, M.TRADES_MIN):
         print(line)
 
+    routes = M.decompose_by_route(trades)
     print("\nDÉCOMPOSITION PAR ROUTE (§10.11 : min 40 trades pour valider)")
-    for route, rm in M.decompose_by_route(trades).items():
+    for route, rm in routes.items():
         ok = rm.n >= M.TRADES_PER_ROUTE_MIN
         print(f"  [{route}] {'VALIDABLE' if ok else 'trop peu de trades — désactivée'} "
               f"({rm.n} trades, hit {rm.hit_rate:.0%}, g/p {rm.gain_loss_ratio:.2f}, "
@@ -136,6 +166,19 @@ def run(universe_path: str, offline: bool, rng: str, cache_dir: str,
         print("\nErreurs d'ingestion :")
         for e in errors:
             print(f"  ! {e}")
+
+    if html_path or json_path:
+        result = _build_result(trades, m, routes, pm.sharpe_annual, reasons,
+                               cfg, universe_path, rng, len(data))
+        if json_path:
+            with open(json_path, "w") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            print(f"\n-> {json_path}")
+        if html_path:
+            from .output.backtest_report import render_html
+            with open(html_path, "w") as f:
+                f.write(render_html(result, standalone=True))
+            print(f"-> {html_path}  (ouvrir dans un navigateur)")
     return 0
 
 
@@ -148,13 +191,16 @@ def main(argv=None) -> int:
     ap.add_argument("--dis-min", type=float, default=3.0)
     ap.add_argument("--target-pct", type=float, default=0.10)
     ap.add_argument("--tax-bps", type=float, default=0.0, help="taxe transaction (FR : 30)")
+    ap.add_argument("--html", default=None, help="écrit un rapport HTML autonome (data-viz)")
+    ap.add_argument("--json", default=None, help="écrit les résultats bruts en JSON")
     args = ap.parse_args(argv)
 
     cfg = BacktestConfig(dis_min=args.dis_min, target_pct=args.target_pct,
                          costs=Costs(tax_bps=args.tax_bps))
     if not os.path.exists(args.universe):
         sys.exit(f"univers introuvable : {args.universe}")
-    return run(args.universe, args.offline, args.range, args.cache_dir, cfg)
+    return run(args.universe, args.offline, args.range, args.cache_dir, cfg,
+               html_path=args.html, json_path=args.json)
 
 
 if __name__ == "__main__":

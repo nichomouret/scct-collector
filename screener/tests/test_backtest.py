@@ -207,5 +207,41 @@ class TestPlaceboAndMetrics(unittest.TestCase):
         self.assertEqual(set(d), {"A", "B"})
 
 
+class TestReport(unittest.TestCase):
+    def _result(self, hit=0.43, ratio=1.81, sharpe=0.35, dd=0.41, n=72):
+        acc = {"hit_rate>50%": hit > 0.5, "gain/perte>1.8": ratio > 1.8,
+               "sharpe_net>1.0": sharpe > 1.0, "drawdown<20%": dd < 0.20,
+               "trades>=150": n >= 150}
+        m = {"n": n, "hit_rate": hit, "gain_loss_ratio": ratio, "mean_return": 0.01,
+             "sharpe_annual": sharpe, "sharpe_per_trade": 0.13, "max_drawdown": dd,
+             "trades_per_year": 8, "acceptance": acc}
+        trades = [{"ticker": "T", "route": "A-tech", "entry_date": _iso(i),
+                   "exit_date": _iso(i + 10), "net_return": (0.1 if i % 3 else -0.08),
+                   "gross_return": 0.1, "sessions_held": 10, "exit_reason": "TARGET"}
+                  for i in range(n)]
+        return {"universe": "u.csv", "range": "10y", "n_titres": 44,
+                "config": {"dis_min": 1.5, "target_pct": 0.10}, "metrics": m,
+                "routes": {"A-tech": m}, "min_route_trades": 40, "placebo_sharpe": -0.32,
+                "exit_reasons": {"TARGET": 25, "STRUCTURAL_STOP": 23, "TIME_STOP": 18,
+                                 "MAX_ADVERSE_EXCURSION": 5, "OPEN_EOD": 1}, "trades": trades}
+
+    def test_renders_no_go_with_key_sections(self):
+        from screener.output.backtest_report import render_html
+        h = render_html(self._result(), standalone=True)
+        self.assertIn("<!doctype html>", h)
+        self.assertIn("No-go", h)
+        self.assertIn("bat toutefois le placebo", h)   # signal > placebo callout
+        self.assertIn("<svg", h)                        # au moins un graphique
+        self.assertIn("Biais de survivance", h)         # garde-fous
+        self.assertIn("✗", h)                            # pastille d'échec
+
+    def test_go_when_all_pass(self):
+        from screener.output.backtest_report import render_html
+        h = render_html(self._result(hit=0.6, ratio=2.0, sharpe=1.3, dd=0.1, n=200),
+                        standalone=False)
+        self.assertNotIn("<!doctype", h)                # contenu seul (Artifact)
+        self.assertIn(">Go<", h)
+
+
 if __name__ == "__main__":
     unittest.main()
