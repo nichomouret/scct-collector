@@ -8,8 +8,10 @@ synthétiques, plus la dégradation gracieuse sans clé.
 """
 from __future__ import annotations
 
+import os
 import unittest
 from datetime import date
+from unittest import mock
 
 from screener.models import CauseClass, Permanence
 from screener.ingestion.news import NewsItem, fetch_news
@@ -120,10 +122,14 @@ class TestKeystoneIntegration(unittest.TestCase):
 
 
 class TestGracefulDegradation(unittest.TestCase):
+    # `api_key=""` retombe sur la variable d'environnement (convention du paquet) :
+    # on la neutralise pour tester la VRAIE absence de clé, sinon le test échoue
+    # sur une machine où ANTHROPIC_API_KEY/NEWS_API_KEY sont exportées.
+    @mock.patch.dict(os.environ, {"NEWS_API_KEY": ""}, clear=False)
     def test_fetch_news_no_key_returns_empty(self):
-        # pas de NEWS_API_KEY passée -> liste vide, aucune exception
         self.assertEqual(fetch_news("Apple", api_key="", from_date=date(2026, 7, 1)), [])
 
+    @mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False)
     def test_classify_news_no_key_returns_none(self):
         items = [NewsItem("t", "d", "src", "2026-07-25", "http://x")]
         self.assertIsNone(classify_news("AAPL", "Apple", items, api_key=""))
