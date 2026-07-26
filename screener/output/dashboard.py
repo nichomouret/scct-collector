@@ -19,6 +19,7 @@ from typing import List
 from .backtest_report import _CSS, _e
 from . import dossier as _dossier
 from ..engine import EvaluationResult
+from ..execution.trade_plan import plan_levels
 from ..models import LossBoundMechanism, Route
 
 _ROUTE_NAME = {Route.A: "dislocation technique", Route.B: "sur-réaction",
@@ -65,11 +66,52 @@ _DASH_CSS = """
 .bt .more ul{margin:0 0 10px;padding-left:16px;}.bt .more li{margin:2px 0;}
 .bt .caret{color:var(--muted);font-size:12px;}
 .bt .empty{padding:34px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:12px;}
+.bt .plan{margin:0 16px 12px;border:1px solid var(--grid);border-radius:10px;overflow:hidden;}
+.bt .plan .lv{display:grid;grid-template-columns:repeat(3,1fr);}
+.bt .plan .lv > div{padding:8px 10px;text-align:center;border-right:1px solid var(--grid);}
+.bt .plan .lv > div:last-child{border-right:0;}
+.bt .plan .lb{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+.bt .plan .pr{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.3;}
+.bt .plan .pc{font-size:11px;font-variant-numeric:tabular-nums;}
+.bt .plan .stop .pr,.bt .plan .stop .pc{color:var(--crit);}
+.bt .plan .tgt .pr,.bt .plan .tgt .pc{color:var(--good);}
+.bt .plan .foot{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;
+  padding:6px 10px;border-top:1px solid var(--grid);font-size:11px;color:var(--ink2);
+  background:color-mix(in srgb,var(--ink) 3%,transparent);}
+.bt .plan .foot b{font-variant-numeric:tabular-nums;}
+.bt .plan .rr-ok{color:var(--good);font-weight:700;} .bt .plan .rr-lo{color:var(--warn);font-weight:700;}
+.bt .plan .na{color:var(--muted);font-style:italic;}
 """
 
 
 def _yn(ok: bool, label: str) -> str:
     return f'<i>{"✓" if ok else "✗"} {_e(label)}</i>'
+
+
+def _plan_block(res: EvaluationResult) -> str:
+    """Bloc « plan de trade » : entrée / stop / objectif + R:R et time-stop (§7.4)."""
+    lv = plan_levels(res.candidate)
+    if lv is None:
+        return ""
+    tgt_pr = f"{lv.target2:.2f}" if lv.target2 else "—"
+    tgt_pc = f"{lv.target2_pct:+.1%}" if lv.target2_pct is not None else "cible non chiffrée"
+    tgt_cls = "" if lv.target2 else " na"
+    foot = []
+    if lv.target1:
+        foot.append(f'palier 1 <b>{lv.target1:.2f}</b> ({lv.target1_pct:+.1%})')
+    if lv.rr is not None:
+        cls = "rr-ok" if lv.rr >= 1.5 else "rr-lo"
+        foot.append(f'R:R <span class="{cls}">{lv.rr:.1f}</span>')
+    foot.append(f'time-stop {lv.time_stop_sessions} séances')
+    if lv.structural_stop:
+        foot.append(f'stop structurel &lt; {lv.structural_stop:.2f}')
+    footer = f'<div class="foot">{" · ".join(foot)}</div>' if foot else ""
+    return f"""<div class="plan" title="{_e(lv.stop_basis)} · {_e(lv.target_basis or 'cible à préciser')}">
+<div class="lv">
+  <div><div class="lb">Entrée</div><div class="pr">{lv.entry:.2f}</div><div class="pc">cours</div></div>
+  <div class="stop"><div class="lb">Stop</div><div class="pr">{lv.stop:.2f}</div><div class="pc">{lv.stop_pct:+.1%}</div></div>
+  <div class="tgt{tgt_cls}"><div class="lb">Objectif</div><div class="pr">{tgt_pr}</div><div class="pc">{tgt_pc}</div></div>
+</div>{footer}</div>"""
 
 
 def _card(res: EvaluationResult) -> str:
@@ -158,7 +200,9 @@ def _card(res: EvaluationResult) -> str:
   <div class="conv"><div class="n">{conv:.1f}</div><div class="l">conviction</div></div>
 </div>
 <div class="rbadges">{badges}<span style="font-size:11px;color:var(--muted);align-self:center">n={res.n_routes} ×{res.conviction.multiplier:.2f} · taille {res.sizing.final_size:.2f}×</span>{status}</div>
-<div class="rows">{rowhtml}<div class="row"><span class="k"></span><span class="v caret">▾ détails · invalidation</span></div></div>
+<div class="rows">{rowhtml}</div>
+{_plan_block(res)}
+<div class="rows"><div class="row"><span class="k"></span><span class="v caret">▾ détails · invalidation</span></div></div>
 <div class="more">{analysis}{entry}<h4>Ce qui invalide</h4><ul>{invs}</ul></div>
 </article>"""
 

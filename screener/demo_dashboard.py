@@ -90,6 +90,9 @@ def _route_b() -> Candidate:
         target_position_value=900e6,
         expected_resolution_days=22,
         hard_stop_distance=0.11, hard_stop_level_motivated=True,
+        # Bande de juste valeur : coussin +11 % (< seuil 15 % → mécanisme reste
+        # le stop dur), mais fournit les cibles de prise de profit.
+        fv_low=158.0, fv_mid=172.0, fv_high=185.0,
         dis=3.4, z_res=-3.6, z_volume=4.1, days_since_shock=2,
         cause_class=CauseClass.SECTOR_CONTAGION, permanence=Permanence.TRANSITORY,
         capi_effacee=24_000e6, impact_flux_actualise=3_500e6,   # ratio ~6.9x
@@ -117,6 +120,7 @@ def _route_c() -> Candidate:
         dis=3.1, z_res=-3.3, z_volume=3.6, days_since_shock=3,
         cause_class=CauseClass.SHORT_REPORT, permanence=Permanence.TRANSITORY,
         rebut_score=7.5, response_date_days=12, dilution_or_urgent_refi=False,
+        upside_thesis_pct=32.0,   # retour vers le niveau pré-attaque (cible du plan)
         aqs=0.8, insider_buy=True,
         short_interest_pct=0.145, borrow_fee=0.09, float_utilization=0.93,
         borrow_jump_bps_3d=260, days_to_cover=4.8,
@@ -198,6 +202,7 @@ def _route_a() -> Candidate:
         dis=3.6, z_res=-3.9, z_volume=4.6, days_since_shock=1,
         cause_class=CauseClass.INDEX_REBALANCE, permanence=Permanence.TRANSITORY,
         negative_filing_72h=False,
+        upside_thesis_pct=18.0,   # rebond mécanique post-rebalancement (cible du plan)
         aqs=None, insider_buy=False,
         short_interest_pct=0.088, borrow_fee=0.022, days_to_cover=3.2,
         analysis="Sortie d'un indice small-cap → vente mécanique concentrée sur une "

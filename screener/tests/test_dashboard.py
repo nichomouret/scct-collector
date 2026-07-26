@@ -42,6 +42,9 @@ class TestDashboard(unittest.TestCase):
         self.assertIn("Ce qui invalide", h)     # bloc dépliable
         self.assertIn("<script>", h)            # filtres/tri client
         self.assertIn("data-routes", h)         # attributs de filtrage
+        self.assertIn('class="plan"', h)        # bloc entrée/stop/objectif
+        self.assertIn("Objectif", h)
+        self.assertIn("time-stop 40", h)
 
     def test_renders_embedded(self):
         h = render_html(self.results, standalone=False)
