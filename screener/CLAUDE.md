@@ -68,6 +68,14 @@ Bout à bout, données réelles gratuites — de la watchlist à la short-list :
 Cache dans `screener/.cache/` (gitignoré). Sans overlay/catalyseur, un décrochage
 échoue le socle S3 — voulu : un décrochage de prix n'est pas un dossier.
 
+**Éligibilité S1 (TwelveData)** : `ingestion/fundamentals.py` + `build_fundamentals.py`
+récupèrent la **capitalisation** (et le cours) laissée vide par `build_universe`,
+écrites dans `fundamentals.built.csv` → `run --fundamentals`. `run` ne remplit
+que les champs VIDES de l'univers (l'univers statique garde la priorité). C'est
+ce qui permet à `run` d'ADMETTRE des candidats sur un univers SEC. ⚠ TwelveData
+n'expose pas le nombre d'analystes → `analyst_coverage` (S1) reste dans l'univers.
+Le dashboard interactif s'obtient avec `run --dashboard shortlist.html`.
+
 ## Registre de catalyseurs (P1 — module central §3.2)
 
 Alimente le socle S3 et les routes C/D/E. Fournisseurs gratuits, extensibles :

@@ -67,17 +67,33 @@ def _market_symbol(uni: dict) -> str:
         return "^GSPC"
 
 
+def _fill_blanks(uni: dict, fund: Optional[dict]) -> dict:
+    """Complète les champs VIDES de l'univers avec le snapshot fondamentaux.
+
+    L'univers (statique) garde la priorité : le snapshot ne remplit que ce qui
+    manque (typiquement `market_cap`, laissé vide par `build_universe`)."""
+    if not fund:
+        return uni
+    out = dict(uni)
+    for k in ("market_cap", "name", "price"):
+        if not (out.get(k) or "").strip() and (fund.get(k) or "").strip():
+            out[k] = fund[k]
+    return out
+
+
 def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optional[str],
         short_interest_path: Optional[str], news_path: Optional[str],
         social_path: Optional[str], cache_dir: str, standard_size: float,
         offline: bool, rng: str, show_all: bool,
-        dashboard_path: Optional[str] = None) -> int:
+        dashboard_path: Optional[str] = None,
+        fundamentals_path: Optional[str] = None) -> int:
     universe = _load_universe(universe_path)
     catalysts = _load_keyed(catalysts_path)
     overlay = _load_keyed(overlay_path)
     short_interest = _load_keyed(short_interest_path)
     news = _load_keyed(news_path)   # cause_class/permanence/résolution (LLM, §5.3)
     social = _load_keyed(social_path)   # tendance sociale Adanos — contexte, hors scoring
+    fundamentals = _load_keyed(fundamentals_path)   # capi/cours TwelveData (S1, §3.1)
 
     market_cache: Dict[str, list] = {}
     results: List[EvaluationResult] = []
@@ -85,6 +101,7 @@ def run(universe_path: str, catalysts_path: Optional[str], overlay_path: Optiona
 
     for uni in universe:
         tk = uni["ticker"].strip().upper()
+        uni = _fill_blanks(uni, fundamentals.get(tk))
         symbol = (uni.get("symbol") or tk).strip()
         mkt_sym = _market_symbol(uni)
         try:
@@ -177,6 +194,8 @@ def main(argv=None) -> int:
                     help="classification news LLM (build_news, §5.3) ; absent = ignoré")
     ap.add_argument("--social", default=os.path.join(_DATA, "social.built.csv"),
                     help="tendance sociale Adanos (build_social) — contexte, hors scoring")
+    ap.add_argument("--fundamentals", default=os.path.join(_DATA, "fundamentals.built.csv"),
+                    help="snapshot capi/cours TwelveData (build_fundamentals, S1) ; absent = ignoré")
     ap.add_argument("--cache-dir", default=os.path.join(_HERE, ".cache"))
     ap.add_argument("--standard-size", type=float, default=1.0)
     ap.add_argument("--range", default="2y", help="fenêtre d'historique Yahoo (ex. 1y, 2y, 5y)")
@@ -191,7 +210,8 @@ def main(argv=None) -> int:
         sys.exit(f"univers introuvable : {args.universe}")
     return run(args.universe, args.catalysts, args.overlay, args.short_interest,
                args.news, args.social, args.cache_dir, args.standard_size,
-               args.offline, args.range, args.show_all, args.dashboard)
+               args.offline, args.range, args.show_all, args.dashboard,
+               args.fundamentals)
 
 
 if __name__ == "__main__":
