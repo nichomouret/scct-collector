@@ -5,3 +5,10 @@ data/news.built.csv
 data/social.built.csv
 data/universe_us.csv
 data/universe_scan.csv
+.env.local
+data/big.csv
+data/hits.csv
+data/overlay.csv
+data/scan.html
+data/shortlist.html
+data/cron.log
