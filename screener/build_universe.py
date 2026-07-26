@@ -2,10 +2,12 @@
 """
 Générateur d'univers US — pour le backtest (§10) et le screener.
 ================================================================
-Source : SEC `company_tickers.json` (gratuit, sans clé) — ~10 000 émetteurs US,
-ordonnés par taille décroissante. On SAUTE le haut du classement (méga/large
-caps) pour viser la bande small/mid où vivent les inefficiences (§6.3), puis on
-échantillonne.
+Source : SEC `company_tickers_exchange.json` (gratuit, sans clé) — émetteurs US
+avec leur place de cotation, ordonnés par taille décroissante. On ne garde que
+les actions cotées sur un marché réglementé (NYSE/Nasdaq/…), EXCLUANT l'OTC
+(actions étrangères, ADR OTC, coquilles) qui produisent de faux décrochages par
+illiquidité. On SAUTE le haut du classement (méga/large caps) pour viser la bande
+small/mid où vivent les inefficiences (§6.3), puis on échantillonne.
 
 ⚠️ BIAIS DE SURVIVANCE (§10.4) : cette liste ne contient que les émetteurs
 ENCORE cotés. Un backtest dessus surestime la performance (délistés/faillites
@@ -29,8 +31,12 @@ import re
 import sys
 import urllib.request
 
-_SEC_URL = "https://www.sec.gov/files/company_tickers.json"
+_SEC_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
 _UA = {"User-Agent": "screener research nm@nmgroup.be"}
+# Places retenues : actions cotées sur un marché réglementé US. On EXCLUT l'OTC
+# (actions étrangères xxxF, ADR OTC xxxY, coquilles/faillites) — source de faux
+# décrochages (illiquidité) et de 404 côté Yahoo (§3.1).
+_KEEP_EXCHANGES = frozenset({"NYSE", "Nasdaq", "NYSE American", "NYSEArca", "CBOE"})
 _VALID = re.compile(r"^[A-Z][A-Z0-9.\-]{0,6}$")   # symboles Yahoo-compatibles
 # Exclusions §3.1 (SPAC / Shell / warrants / units / preferreds) — heuristique nom.
 _EXCLUDE_NAME = re.compile(
@@ -39,29 +45,36 @@ _EXCLUDE_NAME = re.compile(
 # Suffixes de symboles à 5 lettres typiques des warrants/units/preferreds.
 _SUSPECT_SUFFIX = ("W", "U", "R", "P", "L", "Z")
 
-_COLS = ["ticker", "symbol", "name", "sector", "region", "market_cap",
+_COLS = ["ticker", "symbol", "name", "sector", "place", "region", "market_cap",
          "analyst_coverage", "target_position_value", "market_index", "sponsor"]
 
 
 def fetch_sec_tickers(timeout: int = 30) -> list:
-    """Liste ordonnée (par taille décroissante) de (ticker, title) depuis la SEC."""
+    """(ticker, title, place) cotés sur un marché réglementé US, taille décroissante.
+
+    Source SEC `company_tickers_exchange.json` (champ `exchange`) : filtre l'OTC
+    et les places inconnues, ne gardant que `_KEEP_EXCHANGES`. L'ordre du fichier
+    (taille décroissante) est préservé pour que `--skip-top` saute les méga-caps."""
     req = urllib.request.Request(_SEC_URL, headers=_UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = json.loads(r.read())
-    # dict indexé numériquement dans l'ordre de taille -> on préserve l'ordre
+        payload = json.loads(r.read())
+    fields = payload["fields"]
+    i_sym, i_name = fields.index("ticker"), fields.index("name")
+    i_exch = fields.index("exchange")
     out = []
-    for k in sorted(data.keys(), key=lambda x: int(x)):
-        it = data[k]
-        sym = (it.get("ticker") or "").strip().upper()
-        name = (it.get("title") or "").strip()
+    for row in payload["data"]:
+        sym = (row[i_sym] or "").strip().upper()
+        name = (row[i_name] or "").strip()
+        exch = (row[i_exch] or "").strip()
+        if exch not in _KEEP_EXCHANGES:
+            continue
         if not _VALID.match(sym):
             continue
         if _EXCLUDE_NAME.search(name):
             continue
-        # symbole à 5 lettres finissant par un suffixe suspect (warrant/unit/pref)
         if len(sym) == 5 and sym.isalpha() and sym.endswith(_SUSPECT_SUFFIX):
             continue
-        out.append((sym, name))
+        out.append((sym, name, exch))
     return out
 
 
@@ -83,10 +96,11 @@ def build(out_path: str, sample: int, skip_top: int, seed: int,
     with open(out_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=_COLS)
         w.writeheader()
-        for sym, name in picked:
+        for sym, name, place in picked:
             w.writerow({
                 "ticker": sym, "symbol": sym, "name": name, "sector": "",
-                "region": "US", "market_cap": "", "analyst_coverage": default_coverage,
+                "place": place, "region": "US", "market_cap": "",
+                "analyst_coverage": default_coverage,
                 "target_position_value": target_position_value,
                 "market_index": "^GSPC", "sponsor": "",
             })

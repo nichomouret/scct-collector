@@ -88,7 +88,7 @@ def _load_universe(path: str) -> List[dict]:
 
 
 # Colonnes d'univers attendues par build_universe / build_* / run.
-_UNI_COLS = ["ticker", "symbol", "name", "sector", "region", "market_cap",
+_UNI_COLS = ["ticker", "symbol", "name", "sector", "place", "region", "market_cap",
              "analyst_coverage", "target_position_value", "market_index", "sponsor"]
 
 
@@ -113,6 +113,7 @@ def _emit_universe(path: str, universe: List[dict], candidates: List[dict],
                 "symbol": (u.get("symbol") or c["ticker"]).strip(),
                 "name": u.get("name") or c.get("name") or c["ticker"],
                 "sector": u.get("sector") or "",
+                "place": u.get("place") or "",
                 "region": (u.get("region") or "US").strip(),
                 "market_cap": "",                       # rempli par build_fundamentals
                 "analyst_coverage": cov,
