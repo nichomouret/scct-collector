@@ -60,6 +60,16 @@ python -m screener.run --universe "$DATA/hits.csv" \
   --news           "$DATA/news.built.csv" \
   --dashboard      "$DATA/shortlist.html" || true
 
+# --- Copie iCloud Drive (pour consulter depuis l'iPhone via l'app Fichiers) ---
+ICLOUD_ROOT="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
+if [ -d "$ICLOUD_ROOT" ]; then
+  PUB="$ICLOUD_ROOT/scct-scan"
+  mkdir -p "$PUB"
+  cp "$DATA/scan.html" "$PUB/scan.html" 2>/dev/null || true
+  cp "$DATA/shortlist.html" "$PUB/shortlist.html" 2>/dev/null || true
+  echo "-> copié dans iCloud Drive → app Fichiers (iPhone) : scct-scan/scan.html"
+fi
+
 echo "=== Terminé. Ouvrir :"
 echo "    file://$ROOT/$DATA/scan.html        (short-list technique + stops/objectifs)"
 echo "    file://$ROOT/$DATA/shortlist.html   (dossiers admis, si overlay rempli)"
