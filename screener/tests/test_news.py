@@ -15,7 +15,8 @@ from unittest import mock
 
 from screener.models import CauseClass, Permanence
 from screener.ingestion.news import (
-    NewsItem, clean_company_name, company_query, fetch_news,
+    NewsItem, _news_from_yahoo_payload, clean_company_name, company_query,
+    fetch_news, fetch_yahoo_news,
 )
 from screener.qualification.news_classifier import (
     NewsClassification, parse_classification, passes_gating, classify_news,
@@ -142,6 +143,33 @@ class TestCompanyQuery(unittest.TestCase):
         # nom == ticker (ou vide) -> on interroge le ticker
         self.assertEqual(company_query("NCLH", "NCLH"), "NCLH")
         self.assertEqual(company_query("", "ABC"), "ABC")
+
+
+class TestYahooNews(unittest.TestCase):
+    def test_parse_and_date_filter(self):
+        import time
+        now = time.time()
+        payload = {"news": [
+            {"title": "WU Misses Q2 Revenue", "publisher": "AP",
+             "link": "http://x", "providerPublishTime": int(now - 3600)},   # récent
+            {"title": "Vieux papier", "publisher": "Z", "link": "http://y",
+             "providerPublishTime": int(now - 30 * 86400)},                 # 30j -> filtré
+        ]}
+        cutoff = now - 7 * 86400
+        items = _news_from_yahoo_payload(payload, cutoff)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "WU Misses Q2 Revenue")
+        self.assertEqual(items[0].source, "AP")
+        self.assertTrue(items[0].published_at)          # ISO renseigné
+
+    def test_no_cutoff_keeps_all(self):
+        payload = {"news": [{"title": "a", "publisher": "p", "link": "u",
+                             "providerPublishTime": 1}]}
+        self.assertEqual(len(_news_from_yahoo_payload(payload, None)), 1)
+
+    def test_empty_payload(self):
+        self.assertEqual(_news_from_yahoo_payload({}, None), [])
+        self.assertEqual(_news_from_yahoo_payload(None, None), [])
 
 
 class TestGracefulDegradation(unittest.TestCase):

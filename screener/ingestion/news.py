@@ -16,14 +16,21 @@ anti-fuite LLM de §10.3 dans le classifieur).
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 _NEWSAPI = "https://newsapi.org/v2/everything"
-_UA = {"User-Agent": "screener-dislocation"}
+# Yahoo Finance search — flux news SANS clé (même famille que les prix, donc même
+# fraîcheur/fuseau). Source par défaut : NewsAPI gratuit est trop limité/instable.
+_YAHOO_SEARCH = ("https://query1.finance.yahoo.com/v1/finance/search"
+                 "?q={q}&newsCount={n}&quotesCount=0")
+_UA = {"User-Agent": "Mozilla/5.0 (screener-dislocation)"}
 
 # Désignations sociales à retirer du nom pour la requête : les articles emploient
 # le nom d'usage court (« Norwegian Cruise Line »), pas le nom légal complet
@@ -66,6 +73,42 @@ class NewsItem:
 
     def as_evidence(self) -> str:
         return f"[{self.published_at}] {self.source} — {self.title} ({self.url})"
+
+
+def _news_from_yahoo_payload(payload, cutoff_ts: Optional[float]) -> List[NewsItem]:
+    """Convertit le bloc `news` d'une réponse Yahoo search en NewsItem (fonction pure)."""
+    out: List[NewsItem] = []
+    for a in (payload or {}).get("news", []) or []:
+        t = a.get("providerPublishTime")
+        if cutoff_ts is not None and t is not None and t < cutoff_ts:
+            continue
+        published = (datetime.fromtimestamp(t, tz=timezone.utc).isoformat()
+                     if t else "")
+        out.append(NewsItem(
+            title=(a.get("title") or "").strip(),
+            description="",                      # le search Yahoo ne fournit pas de résumé
+            source=(a.get("publisher") or "").strip(),
+            published_at=published,
+            url=(a.get("link") or "").strip(),
+        ))
+    return out
+
+
+def fetch_yahoo_news(ticker: str, days: int = 7, count: int = 10,
+                     timeout: int = 25) -> List[NewsItem]:
+    """News récentes d'un ticker via Yahoo Finance search — SANS clé, stdlib pure.
+
+    Filtre sur les `days` derniers jours (fraîcheur §5.3). Renvoie [] en cas
+    d'échec (dégradation gracieuse) — jamais d'exception qui bloque la chaîne."""
+    url = _YAHOO_SEARCH.format(q=urllib.parse.quote(ticker), n=max(1, min(count, 20)))
+    req = urllib.request.Request(url, headers=_UA)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            payload = json.loads(r.read())
+    except Exception:  # noqa: BLE001 — dégradation gracieuse
+        return []
+    cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=days)).timestamp()
+    return _news_from_yahoo_payload(payload, cutoff)
 
 
 def fetch_news(query: str, api_key: Optional[str] = None,

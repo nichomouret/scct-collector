@@ -8,9 +8,9 @@ via Claude (§5.3) en `cause_class` / `permanence` / `expected_resolution_days`.
 C'est ce qui automatise le remplissage des champs qualitatifs jusque-là saisis
 à la main — le cœur du « premier livrable utilisable au quotidien » (§11, P4).
 
-Nécessite `NEWS_API_KEY` (récupération) et `ANTHROPIC_API_KEY` (classification).
-Sans l'un ou l'autre, écrit les lignes qu'il peut et laisse les autres vides ;
-la chaîne retombe sur l'overlay manuel.
+News récupérées via Yahoo Finance (SANS clé). Seul `ANTHROPIC_API_KEY` est requis
+pour la classification ; sans lui, écrit des lignes vides et la chaîne retombe
+sur l'overlay manuel.
 
 ⚠️ Live / forward uniquement — voir la garde anti-fuite LLM (§10.3) dans
 `qualification/news_classifier.py`. Ne pas utiliser pour peupler un backtest.
@@ -22,10 +22,9 @@ import csv
 import os
 import sys
 import time
-from datetime import date, timedelta
 from typing import List
 
-from .ingestion.news import company_query, fetch_news
+from .ingestion.news import fetch_yahoo_news
 from .ingestion.social import SocialSignal
 from .qualification.news_classifier import classify_news, passes_gating
 
@@ -73,8 +72,6 @@ def _load_universe(path: str) -> List[dict]:
 def build(universe_path: str, out_path: str, social_path: str, sleep_s: float) -> int:
     universe = _load_universe(universe_path)
     social = _load_keyed(social_path)   # indice social passé au LLM (contexte)
-    if not os.getenv("NEWS_API_KEY"):
-        print("⚠ NEWS_API_KEY absent — aucune news récupérée.", file=sys.stderr)
     if not os.getenv("ANTHROPIC_API_KEY"):
         print("⚠ ANTHROPIC_API_KEY absent — aucune classification (overlay manuel requis).",
               file=sys.stderr)
@@ -83,10 +80,9 @@ def build(universe_path: str, out_path: str, social_path: str, sleep_s: float) -
     for i, u in enumerate(universe):
         tk = u["ticker"].strip().upper()
         name = (u.get("name") or tk).strip()
-        # Nom d'usage (sans CORP/LTD/HOLDINGS…) + fenêtre 7j pour couvrir un choc
-        # localisé jusqu'à J-5 (§4.2) et sa news explicative.
-        query = company_query(name, tk)
-        items = fetch_news(query, from_date=date.today() - timedelta(days=7))
+        # Source de news : Yahoo Finance (SANS clé), fenêtre 7j pour couvrir un
+        # choc localisé jusqu'à J-5 (§4.2) et sa news explicative.
+        items = fetch_yahoo_news(tk, days=7)
         cls = classify_news(tk, name, items, social_hint=_social_hint(social.get(tk)))
         if cls is None:
             rows.append({c: "" for c in _OUT_COLS} | {"ticker": tk})
