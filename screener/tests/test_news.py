@@ -14,7 +14,9 @@ from datetime import date
 from unittest import mock
 
 from screener.models import CauseClass, Permanence
-from screener.ingestion.news import NewsItem, fetch_news
+from screener.ingestion.news import (
+    NewsItem, clean_company_name, company_query, fetch_news,
+)
 from screener.qualification.news_classifier import (
     NewsClassification, parse_classification, passes_gating, classify_news,
 )
@@ -119,6 +121,27 @@ class TestKeystoneIntegration(unittest.TestCase):
                                  stab_features=bc.stab_features)
         self.assertTrue(res.admitted)
         self.assertIn(Route.B, res.route_labels)
+
+
+class TestCompanyQuery(unittest.TestCase):
+    def test_strips_corporate_suffixes(self):
+        self.assertEqual(clean_company_name("NORWEGIAN CRUISE LINE HOLDINGS LTD."),
+                         "NORWEGIAN CRUISE LINE")
+        self.assertEqual(clean_company_name("FirstService Corp"), "FirstService")
+        self.assertEqual(clean_company_name("Xylem Inc."), "Xylem")
+
+    def test_keeps_at_least_first_token(self):
+        # un nom entièrement composé de désignations ne doit pas se vider
+        self.assertTrue(clean_company_name("Holdings Corp"))
+
+    def test_query_uses_quoted_clean_name(self):
+        self.assertEqual(company_query("NORWEGIAN CRUISE LINE HOLDINGS LTD.", "NCLH"),
+                         '"NORWEGIAN CRUISE LINE"')
+
+    def test_query_falls_back_to_ticker(self):
+        # nom == ticker (ou vide) -> on interroge le ticker
+        self.assertEqual(company_query("NCLH", "NCLH"), "NCLH")
+        self.assertEqual(company_query("", "ABC"), "ABC")
 
 
 class TestGracefulDegradation(unittest.TestCase):

@@ -17,12 +17,43 @@ anti-fuite LLM de §10.3 dans le classifieur).
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import List, Optional
 
 _NEWSAPI = "https://newsapi.org/v2/everything"
 _UA = {"User-Agent": "screener-dislocation"}
+
+# Désignations sociales à retirer du nom pour la requête : les articles emploient
+# le nom d'usage court (« Norwegian Cruise Line »), pas le nom légal complet
+# (« NORWEGIAN CRUISE LINE HOLDINGS LTD. »). Chercher le nom complet en phrase
+# exacte ne ramène rien — cause n°1 des `NO_IDENTIFIED_CAUSE` à tort.
+_NAME_SUFFIXES = {
+    "CORP", "CORPORATION", "INC", "INCORPORATED", "LTD", "LIMITED", "LLC", "PLC",
+    "CO", "COMPANY", "COS", "HOLDINGS", "HOLDING", "GROUP", "GRP", "SA", "NV",
+    "AG", "ADR", "CLASS", "COM", "THE", "LP", "TRUST", "ENTERPRISES", "INDUSTRIES",
+    "INTERNATIONAL", "WORLDWIDE", "TECHNOLOGIES", "SYSTEMS",
+}
+
+
+def clean_company_name(name: str) -> str:
+    """Nom d'usage : retire ponctuation et désignations sociales en fin de nom.
+
+    « NORWEGIAN CRUISE LINE HOLDINGS LTD. » -> « NORWEGIAN CRUISE LINE ».
+    Conserve au moins le premier mot (ne vide jamais un nom d'une seule société)."""
+    toks = re.sub(r"[.,/]", " ", name or "").split()
+    while len(toks) > 1 and toks[-1].upper().strip(".") in _NAME_SUFFIXES:
+        toks.pop()
+    return " ".join(toks).strip()
+
+
+def company_query(name: str, ticker: str) -> str:
+    """Requête NewsAPI : nom d'usage en phrase exacte, sinon repli sur le ticker."""
+    clean = clean_company_name(name)
+    if clean and clean.upper() != ticker.upper():
+        return f'"{clean}"'
+    return ticker
 
 
 @dataclass

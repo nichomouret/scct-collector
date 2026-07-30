@@ -22,9 +22,10 @@ import csv
 import os
 import sys
 import time
+from datetime import date, timedelta
 from typing import List
 
-from .ingestion.news import fetch_news
+from .ingestion.news import company_query, fetch_news
 from .ingestion.social import SocialSignal
 from .qualification.news_classifier import classify_news, passes_gating
 
@@ -82,8 +83,10 @@ def build(universe_path: str, out_path: str, social_path: str, sleep_s: float) -
     for i, u in enumerate(universe):
         tk = u["ticker"].strip().upper()
         name = (u.get("name") or tk).strip()
-        query = f'"{name}"' if name and name != tk else tk
-        items = fetch_news(query)
+        # Nom d'usage (sans CORP/LTD/HOLDINGS…) + fenêtre 7j pour couvrir un choc
+        # localisé jusqu'à J-5 (§4.2) et sa news explicative.
+        query = company_query(name, tk)
+        items = fetch_news(query, from_date=date.today() - timedelta(days=7))
         cls = classify_news(tk, name, items, social_hint=_social_hint(social.get(tk)))
         if cls is None:
             rows.append({c: "" for c in _OUT_COLS} | {"ticker": tk})
