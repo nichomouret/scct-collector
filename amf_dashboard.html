@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar AMF — franchissements & positions courtes</title>
+<style>
+  :root{--bg:#0e1117;--panel:#161b22;--line:#2b3340;--txt:#e6edf3;--muted:#8b949e;
+        --pos:#2ea043;--neg:#f85149;--warn:#d29922;--acc:#388bfd;--neu:#6e7681}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{padding:14px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);z-index:50}
+  header h1{font-size:16px;margin:0;letter-spacing:.5px;font-weight:700}
+  header .meta{color:var(--muted);font-size:12px}
+  header .pill{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:7px 16px;cursor:pointer;color:var(--txt);font-size:13px}
+  header .pill:hover{border-color:var(--acc)}
+  .wrap{padding:18px 22px;max-width:1320px;margin:0 auto}
+  .note{background:rgba(210,153,34,.10);border:1px solid var(--warn);border-radius:10px;padding:13px 17px;margin-bottom:16px;font-size:12.5px;line-height:1.55}
+  .note b{color:var(--warn)}
+  .tabs{display:flex;gap:8px;margin:6px 0 16px}
+  .tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:600}
+  .tabs button.on{color:var(--txt);border-color:var(--acc);background:rgba(56,139,253,.12)}
+  .tabs .badge{display:inline-block;margin-left:7px;background:var(--line);border-radius:10px;padding:1px 8px;font-size:11px}
+  h2{font-size:13px;letter-spacing:.4px;color:var(--acc);text-transform:uppercase;margin:22px 0 10px}
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;background:var(--panel)}
+  th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;position:sticky;top:57px;background:var(--panel)}
+  th:hover{color:var(--txt)}
+  th .arw{color:var(--acc);font-size:10px}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(56,139,253,.05)}
+  td.tk{font-weight:700;font-size:14px}
+  .isin{font-size:11px;color:var(--muted);font-weight:400}
+  .holder{max-width:230px;white-space:normal;font-size:12.5px}
+  .pos{color:var(--pos)} .neg{color:var(--neg)} .mut{color:var(--muted)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .b-hausse{background:rgba(46,160,67,.16);color:var(--pos)}
+  .b-baisse{background:rgba(248,81,73,.16);color:var(--neg)}
+  .b-haussière{background:rgba(46,160,67,.16);color:var(--pos)}
+  .b-baissière{background:rgba(248,81,73,.16);color:var(--neg)}
+  .b-neutre{background:rgba(139,148,158,.16);color:var(--muted)}
+  .b-na{background:rgba(139,148,158,.10);color:var(--neu)}
+  .ratio{font-weight:700}
+  .sum{max-width:340px;white-space:normal;color:var(--txt);font-size:12.5px;line-height:1.45}
+  .subnote{color:var(--muted);font-size:11px;margin-top:2px;white-space:normal;max-width:200px}
+  a.pdf{color:var(--acc);text-decoration:none;font-size:12px}
+  a.pdf:hover{text-decoration:underline}
+  .small{color:var(--muted);font-size:11px;margin:16px 0;line-height:1.6}
+  #empty{padding:26px;text-align:center;color:var(--muted)}
+  .barwrap{display:inline-block;width:60px;height:7px;border-radius:4px;background:#30363d;vertical-align:middle;margin-left:7px;overflow:hidden}
+  .barwrap>span{display:block;height:100%}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>🇫🇷 RADAR AMF</h1>
+  <span class="meta" id="meta">chargement…</span>
+  <button class="pill" onclick="load()">↻ Rafraîchir</button>
+</header>
+<div class="wrap">
+
+  <div class="note">
+    <b>ℹ️ Aide à la décision, pas un conseil d'investissement.</b>
+    Données réglementaires AMF (BDIF & open data short-selling) enrichies d'une analyse
+    technique automatique, d'une synthèse analystes (best-effort) et d'une note sociale.
+    <b>Ratio positions courtes = % du capital</b> (donnée réglementaire AMF, pas du flottant).
+    Analystes/social affichent « N/A » quand aucune source gratuite ne couvre le titre.
+  </div>
+
+  <div class="tabs">
+    <button id="tab-f" class="on" onclick="showTab('f')">Franchissements de seuils <span class="badge" id="cnt-f">0</span></button>
+    <button id="tab-s" onclick="showTab('s')">Positions courtes <span class="badge" id="cnt-s">0</span></button>
+  </div>
+
+  <section id="sec-f">
+    <h2>Agent 1 · Franchissements de seuils — enrichi (Agent 2)</h2>
+    <div class="tblwrap"><table id="tbl-f"><thead><tr id="head-f"></tr></thead><tbody id="rows-f"></tbody></table></div>
+    <div id="empty-f" class="hide"></div>
+  </section>
+
+  <section id="sec-s" class="hide">
+    <h2>Agent 3 · Positions courtes nettes — enrichi (Agent 4)</h2>
+    <div class="tblwrap"><table id="tbl-s"><thead><tr id="head-s"></tr></thead><tbody id="rows-s"></tbody></table></div>
+    <div id="empty-s" class="hide"></div>
+  </section>
+
+  <p class="small" id="foot"></p>
+</div>
+
+<script>
+let DATA=null, sortState={};
+
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function num(x,suf=''){return (x==null||x==='')?'<span class="mut">—</span>':(esc(x)+suf);}
+function badge(txt,cls){return `<span class="badge b-${cls}">${esc(txt)}</span>`;}
+
+function techCell(e){
+  const t=e&&e.technical;
+  if(!t||!t.available) return `${badge('N/A','na')}<div class="subnote">${esc(t&&t.note||'')}</div>`;
+  const v=(t.verdict||'Neutre').toLowerCase();
+  return `${badge(t.verdict,v)}<div class="subnote">${esc(t.note||'')}</div>`;
+}
+function analystCell(e){
+  const a=e&&e.analyst;
+  if(!a||!a.available) return badge('N/A','na');
+  if(a.target_median!=null) return `obj. méd. ${esc(a.target_median)}<div class="subnote">${esc(a.note||'')}</div>`;
+  return badge('N/A','na');
+}
+function socialCell(e){
+  const s=e&&e.social;
+  if(!s||!s.available) return badge('N/A','na');
+  return `<b>${esc(s.mentions_48h)}</b> ment./48h<div class="subnote">${esc(s.note||'')}</div>`;
+}
+function ratioBar(r){
+  if(r==null) return '<span class="mut">—</span>';
+  const w=Math.min(100,(r/3)*100); // 3% ≈ pleine barre
+  const col=r>=2?'var(--neg)':r>=1?'var(--warn)':'var(--muted)';
+  return `<span class="ratio">${esc(r)}%</span><span class="barwrap"><span style="width:${w}%;background:${col}"></span></span>`;
+}
+
+const COLS_F=[
+  {k:'issuer',t:'Titre',get:r=>`<span class="tk">${esc(r.issuer||'—')}</span><div class="isin">${esc(r.isin||'')}</div>`,sort:r=>r.issuer||''},
+  {k:'declarant',t:'Détenteur',get:r=>`<div class="holder">${esc(r.declarant||r.declarant_raw||'—')}</div>`,sort:r=>r.declarant||''},
+  {k:'sens',t:'Sens',get:r=>r.sens?badge(r.sens,r.sens):'<span class="mut">—</span>',sort:r=>r.sens||''},
+  {k:'seuils',t:'Seuils',get:r=>esc((r.seuils||[]).join(', ')||'—'),sort:r=>(r.seuils||[]).length},
+  {k:'pct_capital',t:'% capital',get:r=>num(r.pct_capital,'%'),sort:r=>r.pct_capital||-1},
+  {k:'pct_droits_vote',t:'% DV',get:r=>num(r.pct_droits_vote,'%'),sort:r=>r.pct_droits_vote||-1},
+  {k:'tech',t:'Technique',get:r=>techCell(r.enrichment),sort:r=>(r.enrichment&&r.enrichment.technical&&r.enrichment.technical.trend_score)||0},
+  {k:'analyst',t:'Analystes',get:r=>analystCell(r.enrichment),sort:r=>0},
+  {k:'social',t:'Social',get:r=>socialCell(r.enrichment),sort:r=>(r.enrichment&&r.enrichment.social&&r.enrichment.social.mentions_48h)||0},
+  {k:'summary',t:'Résumé',get:r=>`<div class="sum">${esc(r.summary||'')}</div>`,sort:r=>r.summary||''},
+  {k:'date',t:'Date',get:r=>`${esc(r.date||'')}${r.pdf_url?` · <a class="pdf" href="${esc(r.pdf_url)}" target="_blank" rel="noopener">PDF ↗</a>`:''}`,sort:r=>r.date||''},
+];
+const COLS_S=[
+  {k:'issuer',t:'Titre',get:r=>`<span class="tk">${esc(r.issuer||'—')}</span><div class="isin">${esc(r.isin||'')}</div>`,sort:r=>r.issuer||''},
+  {k:'detenteur',t:'Détenteur',get:r=>`<div class="holder">${esc(r.detenteur||'—')}</div>`,sort:r=>r.detenteur||''},
+  {k:'ratio',t:'Ratio (% capital)',get:r=>ratioBar(r.ratio),sort:r=>r.ratio||-1},
+  {k:'active',t:'Statut',get:r=>r.active?badge('active','hausse'):badge('clôturée','neutre'),sort:r=>r.active?1:0},
+  {k:'tech',t:'Technique',get:r=>techCell(r.enrichment),sort:r=>(r.enrichment&&r.enrichment.technical&&r.enrichment.technical.trend_score)||0},
+  {k:'analyst',t:'Analystes',get:r=>analystCell(r.enrichment),sort:r=>0},
+  {k:'social',t:'Social',get:r=>socialCell(r.enrichment),sort:r=>(r.enrichment&&r.enrichment.social&&r.enrichment.social.mentions_48h)||0},
+  {k:'summary',t:'Résumé',get:r=>`<div class="sum">${esc(r.summary||'')}</div>`,sort:r=>r.summary||''},
+  {k:'date_publication',t:'Publiée',get:r=>esc(r.date_publication||''),sort:r=>r.date_publication||''},
+];
+
+function renderTable(which){
+  const cols=which==='f'?COLS_F:COLS_S;
+  const rows=(which==='f'?DATA.franchissements:DATA.positions_courtes)||[];
+  const head=document.getElementById('head-'+which);
+  const body=document.getElementById('rows-'+which);
+  const st=sortState[which]||{k:null,dir:-1};
+  head.innerHTML=cols.map(c=>{
+    const arw=st.k===c.k?`<span class="arw">${st.dir>0?'▲':'▼'}</span>`:'';
+    return `<th onclick="doSort('${which}','${c.k}')">${esc(c.t)} ${arw}</th>`;
+  }).join('');
+  let list=rows.slice();
+  if(st.k){
+    const col=cols.find(c=>c.k===st.k);
+    list.sort((a,b)=>{let x=col.sort(a),y=col.sort(b);
+      if(typeof x==='number'&&typeof y==='number')return (x-y)*st.dir;
+      return String(x).localeCompare(String(y))*st.dir;});
+  }
+  body.innerHTML=list.map(r=>`<tr>${cols.map(c=>`<td>${c.get(r)}</td>`).join('')}</tr>`).join('');
+  const emp=document.getElementById('empty-'+which);
+  if(!rows.length){emp.classList.remove('hide');emp.textContent='Aucune publication sur la période.';}
+  else emp.classList.add('hide');
+}
+function doSort(which,k){
+  const st=sortState[which]||{k:null,dir:-1};
+  sortState[which]=(st.k===k)?{k,dir:-st.dir}:{k,dir:-1};
+  renderTable(which);
+}
+function showTab(which){
+  document.getElementById('tab-f').classList.toggle('on',which==='f');
+  document.getElementById('tab-s').classList.toggle('on',which==='s');
+  document.getElementById('sec-f').classList.toggle('hide',which!=='f');
+  document.getElementById('sec-s').classList.toggle('hide',which!=='s');
+}
+
+async function load(){
+  document.getElementById('meta').textContent='chargement…';
+  try{
+    const r=await fetch('amf_latest.json?t='+Date.now());
+    DATA=await r.json();
+  }catch(e){document.getElementById('meta').textContent='erreur de chargement';return;}
+  const c=DATA.counts||{};
+  document.getElementById('cnt-f').textContent=c.franchissements||0;
+  document.getElementById('cnt-s').textContent=c.positions_courtes||0;
+  const fl=DATA.flags||{};
+  document.getElementById('meta').textContent=
+    `cible ${DATA.target_date||'?'} · généré ${(DATA.generated_utc||'').replace('T',' ').replace('Z',' UTC')}`;
+  document.getElementById('foot').innerHTML=
+    `Sources : BDIF AMF (franchissements) · open data AMF/data.gouv (positions courtes) · `+
+    `TwelveData (cours, ${fl.twelvedata?'actif':'inactif'}) · résumés Claude (${fl.claude?'actif':'repli déterministe'}). `+
+    `Clique un en-tête pour trier. Aide à la décision — aucune reco d'achat/vente.`;
+  renderTable('f');renderTable('s');
+}
+load();
+</script>
+</body>
+</html>

@@ -36,6 +36,21 @@ def scan_json():
                     "signals": [], "all": []})
 
 
+@app.route("/amf")
+def amf_home():
+    return send_from_directory(HERE, "amf_dashboard.html")
+
+
+@app.route("/amf_latest.json")
+def amf_json():
+    p = os.path.join(HERE, "amf_latest.json")
+    if os.path.exists(p):
+        return send_from_directory(HERE, "amf_latest.json")
+    return jsonify({"generated_utc": "", "target_date": "",
+                    "counts": {"franchissements": 0, "positions_courtes": 0},
+                    "flags": {}, "franchissements": [], "positions_courtes": []})
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -62,7 +77,12 @@ def spawn_workers():
         f"while true; do {sys.executable} scct_scan.py --watchlist {wl} "
         f"--out scan_latest.json; sleep {every}; done"
     ], cwd=HERE, env=env)
-    print("workers lancés (collecteur + boucle de scan)", flush=True)
+    # 3) orchestrateur AMF (franchissements + positions courtes) : passe quotidienne
+    #    16h30–17h00 Paris + passage immédiat au démarrage. Désactivable via AMF_ENABLE=0.
+    if os.environ.get("AMF_ENABLE", "1") == "1":
+        subprocess.Popen([sys.executable, "amf_orchestrator.py"], cwd=HERE, env=env)
+        print("orchestrateur AMF lancé (dashboard /amf)", flush=True)
+    print("workers lancés (collecteur + boucle de scan + AMF)", flush=True)
 
 
 if __name__ == "__main__":

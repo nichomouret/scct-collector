@@ -2,6 +2,7 @@
 *.db
 logs/
 scan_latest.json
+amf_latest.json
 *.csv
 tickers.txt
 universe.txt

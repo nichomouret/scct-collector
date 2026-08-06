@@ -5,3 +5,9 @@ praw>=7.7
 # Laissé actif pour le déploiement Railway avec Postgres ; inoffensif en SQLite.
 psycopg2-binary>=2.9
 # (Quiver retiré : plus de dataset Reddit. backtest_coverage.py teste Adanos via requests.)
+
+# --- Sous-système AMF (franchissements de seuils + positions courtes) ---
+# PyMuPDF : extraction du texte des PDF de déclarations BDIF (agent 1).
+pymupdf>=1.24
+# tzdata : fuseau Europe/Paris pour la planification 16h30–17h00 (zoneinfo).
+tzdata>=2024.1
