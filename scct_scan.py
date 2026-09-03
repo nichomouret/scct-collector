@@ -38,6 +38,7 @@ import c2_coordination as C2
 import ortex_c4_pull as C4
 import c5_catalyst as C5
 import adanos_x as X
+from telegram_alert import send_telegram
 from ticker_extractor import STOPLIST
 try:
     from storage import Store
@@ -82,7 +83,7 @@ def price_snapshot(tk, max_age_days=10):
     Fail-open : pas de clé / erreur réseau -> tradeable=True (on ne bloque pas)."""
     if tk in _price_cache:
         return _price_cache[tk]
-    snap = {"tradeable": True, "last": None, "chg_3d": None, "chg_5d": None,
+    snap = {"tradeable": True, "last": None, "chg_1d": None, "chg_3d": None, "chg_5d": None,
             "chg_21d": None, "chg_63d": None, "run_max": None}
     if not TD_KEY:
         _price_cache[tk] = snap
@@ -107,6 +108,7 @@ def price_snapshot(tk, max_age_days=10):
                 snap["last"] = closes[0]
                 def _chg(n):
                     return (closes[0] - closes[n]) / closes[n] if len(closes) > n and closes[n] > 0 else None
+                snap["chg_1d"] = _chg(1)      # variation du jour
                 snap["chg_3d"] = _chg(3)      # ~3 séances
                 snap["chg_5d"] = _chg(5)      # ~1 semaine
                 snap["chg_21d"] = _chg(21)    # ~1 mois
@@ -152,6 +154,12 @@ C2_MISSING_DAMP = float(os.getenv("C2_MISSING_DAMP", "0.50"))  # poids du volume
 X_STOCK_MAX = int(os.getenv("X_STOCK_MAX", "60"))   # nb max d'appels X buzz (x_stock)/cycle
 C2_MAX_CALLS = int(os.getenv("C2_MAX_CALLS", "20"))  # nb max de candidats scorés en C2 (3 appels chacun)/cycle
 TRACK_MAX = int(os.getenv("TRACK_MAX", "40"))        # nb max de titres suivis re-scorés/cycle
+# --- Alerte « surveillance immédiate » (Telegram) : titre qui BOUGE + BUZZE maintenant ---
+ALERT_MOVE_1D = float(os.getenv("ALERT_MOVE_1D", "0.08"))    # variation du jour >= (ex. +8%)
+ALERT_MENTIONS = int(os.getenv("ALERT_MENTIONS", "30"))     # OU spike de mentions Reddit >=
+ALERT_XBUZZ = float(os.getenv("ALERT_XBUZZ", "60"))         # OU buzz X >=
+ALERT_MAX_RUN63 = float(os.getenv("ALERT_MAX_RUN63", "1.0")) # écarte les titres déjà +100%/3mois
+ALERT_COOLDOWN_H = float(os.getenv("ALERT_COOLDOWN_H", "24"))
 
 # ETF / indices courants à exclure (pas des cibles de squeeze micro-cap)
 ETF_BLOCK = {"SPY", "QQQ", "VOO", "IVV", "VTI", "SGOV", "USO", "USO", "SOXL", "SOXS",
@@ -313,41 +321,53 @@ def score(social, c4):
     return round(sum(v * w for v, w in parts) / wsum * 100, 1) if wsum else 0.0
 
 
-def claude_analysis(signals, n_universe):
-    """Résumé en langage clair du scan via l'API Anthropic (clé ANTHROPIC_API_KEY).
-    Renvoie un texte FR de 3-4 phrases, ou un repli déterministe si pas de clé/erreur."""
+def claude_analysis(rows, n_universe):
+    """Résumé DESCRIPTIF du radar social (API Anthropic). PAS de prédiction ni de
+    recommandation : le backtest a montré que le buzz ne prédit pas le prix."""
     key = os.getenv("ANTHROPIC_API_KEY", "")
-    top = signals[:8]
+    act = [r for r in rows if (r.get("mentions") or 0) or (r.get("x_buzz") or 0)]
+    act.sort(key=lambda r: ((r.get("mentions") or 0), (r.get("x_buzz") or 0)), reverse=True)
+    top = act[:8]
+    if not top:
+        return "Rien de particulièrement discuté en ce moment."
     if not key:
-        if not signals:
-            return "Aucun signal au-dessus du seuil — période calme, pas de squeeze social détecté."
-        names = ", ".join(f"{s['ticker']} ({s['SCCT']})" for s in top)
-        return f"{len(signals)} candidats : {names}. Vérifie float, short interest et catalyseur avant tout trade."
+        names = ", ".join(s["ticker"] for s in top)
+        return (f"Titres les plus discutés : {names}. Information, pas un signal — "
+                f"le buzz suit le prix, il ne le prédit pas.")
     try:
         import json as _json
+        slim = [{"ticker": r["ticker"], "name": r.get("name"), "mentions": r.get("mentions"),
+                 "x_buzz": r.get("x_buzz"), "x_sent": r.get("x_sent"),
+                 "chg_1d": r.get("chg_1d"), "chg_5d": r.get("chg_5d"),
+                 "short_pct": round(r["short_int"]*100, 1) if r.get("short_int") is not None else None}
+                for r in top]
         payload = {
             "model": os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
-            "max_tokens": 600,
+            "max_tokens": 550,
             "messages": [{"role": "user", "content":
-                "Tu es analyste pour SCCT, un détecteur de squeezes micro-cap US via coordination "
-                "sociale Reddit (score 0-100 ; C1=spike volume, C2=coordination, C4=pression de float, "
-                "C5=catalyseur ; quadrants Q1 pump pur / Q2 convergence idéale / Q3 bruit / Q4 rerating). "
-                "Rédige en FRANÇAIS, format STRICT, SANS markdown (pas de #, pas de **, pas de gras) :\n"
-                "Ligne 1 : 'VERDICT: ' suivi d'UNE phrase (y a-t-il quelque chose à regarder, oui/non et pourquoi).\n"
-                "Puis 2 à 4 lignes, chacune commençant par '- ', courtes (1 phrase max) : le ou les "
-                "candidats notables, les pièges, ce qu'il faut surveiller. Sobre, factuel. "
-                "Termine par une ligne '- Rappel: détection algorithmique, pas un conseil.' Données : "
-                + _json.dumps({"n_universe": n_universe, "signals": top}, ensure_ascii=False)}],
+                "Tu es l'analyste d'un radar de titres US. Signale les titres nécessitant une "
+                "SURVEILLANCE IMMÉDIATE = ceux qui BOUGENT le plus aujourd'hui (chg_1d/chg_5d) ET/OU "
+                "buzzent le plus maintenant (mentions, buzz X). Tu PEUX utiliser 'signal', "
+                "'surveillance immédiate', 'à surveiller'. MAIS reste honnête : ne promets AUCUN gain "
+                "ni direction — pas de 'va monter', 'rentabilité', 'opportunité', 'à acheter/vendre', "
+                "'garantie'. Rappelle que ces titres BOUGENT DÉJÀ (le buzz suit le prix, il ne le "
+                "prédit pas) et qu'il faut vérifier la cause. FRANÇAIS, sans markdown (pas de #, **, gras) :\n"
+                "Ligne 1 : 'VERDICT: ' + UNE phrase : y a-t-il un/des titres en surveillance immédiate "
+                "maintenant, lesquels et pourquoi (le fait qui déclenche).\n"
+                "Puis 2 à 4 lignes '- ' : chaque titre à surveiller avec le fait BRUT "
+                "(variation du jour, mentions, buzz X, sentiment, short).\n"
+                "Termine par '- Rappel: ça bouge déjà — détection, pas un conseil ; vérifie la cause avant d'agir.'\n"
+                "Données : " + _json.dumps({"n_univers": n_universe, "titres": slim}, ensure_ascii=False)}],
         }
         r = requests.post("https://api.anthropic.com/v1/messages",
                           headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                                    "content-type": "application/json"},
                           json=payload, timeout=30)
         if r.status_code != 200:
-            return f"(analyse Claude indisponible : HTTP {r.status_code})"
+            return f"(analyse indisponible : HTTP {r.status_code})"
         return r.json()["content"][0]["text"].strip()
     except Exception as e:
-        return f"(analyse Claude indisponible : {e})"
+        return f"(analyse indisponible : {e})"
 
 
 def quadrant(social, c5):
@@ -544,6 +564,7 @@ def main():
                         "short_int": si, "x_buzz": x_buzz, "x_sent": x_sent, "cross": cross,
                         "x_confirmed": x_confirmed, "ignition": ignition,
                         "reddit_soc": reddit_soc, "x_soc": x_soc, "social": social,
+                        "chg_1d": round(snap.get("chg_1d"), 3) if snap.get("chg_1d") is not None else None,
                         "chg_3d": round(snap.get("chg_3d"), 3) if snap.get("chg_3d") is not None else None,
                         "chg_5d": round(chg_5d, 3) if chg_5d is not None else None,
                         "chg_21d": round(chg_21d, 3) if chg_21d is not None else None,
@@ -653,7 +674,7 @@ def main():
 
     snapshot = {"generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "min_score": args.min_score, "n_universe": len(universe),
-                "analysis": claude_analysis(sigs, len(universe)),
+                "analysis": claude_analysis(results, len(universe)),
                 "gems": gems, "signals": sigs, "watch": watch, "tracked": tracked_out,
                 "structural": structural, "all": results}
     with open(args.out, "w") as fh:
@@ -661,6 +682,36 @@ def main():
     n_sig = len(snapshot["signals"])
     print(f"\n⭐ {len(gems)} pépites · {n_sig} signaux ≥ {args.min_score} · {len(watch)} en veille · "
           f"{len(tracked_out)} en suivi · {len(structural)} en amorce structurelle -> {args.out}")
+
+    # --- ALERTE « surveillance immédiate » : titre qui BOUGE (jour) + BUZZE maintenant ---
+    # Coïncident (le move a commencé), pas prédictif : te prévient tôt pour regarder vite.
+    watch_now = []
+    for r in results:
+        c1d = r.get("chg_1d"); c63 = r.get("chg_63d")
+        moving = c1d is not None and c1d >= ALERT_MOVE_1D
+        buzzing = (r.get("mentions") or 0) >= ALERT_MENTIONS or (r.get("x_buzz") or 0) >= ALERT_XBUZZ
+        not_spent = c63 is None or c63 < ALERT_MAX_RUN63   # écarte les déjà +100%/3mois
+        if moving and buzzing and not_spent:
+            watch_now.append(r)
+    watch_now.sort(key=lambda r: r.get("chg_1d") or 0, reverse=True)
+    sent = 0
+    for r in watch_now:
+        tk = r["ticker"]
+        if store and store.alert_recent(tk, ALERT_COOLDOWN_H):
+            continue   # anti-spam : déjà alerté récemment
+        name = f" ({r['name']})" if r.get("name") else ""
+        prix = f" · prix ${r['last_price']:.2f}" if r.get("last_price") is not None else ""
+        xb = round(r["x_buzz"]) if r.get("x_buzz") else "–"
+        short = f" · Short {r['short_int']*100:.0f}%" if r.get("short_int") is not None else ""
+        msg = (f"🚨 <b>Surveillance immédiate — {tk}</b>{name}\n"
+               f"Jour {r['chg_1d']*100:+.0f}%{prix}\n"
+               f"Mentions Reddit {r.get('mentions') or '–'} · Buzz X {xb}{short}\n"
+               f"⚠️ Le titre BOUGE déjà — à regarder vite, pas une reco. Vérifie la cause.")
+        if send_telegram(msg):
+            sent += 1
+            if store:
+                store.alert_mark(tk)
+    print(f"🚨 {len(watch_now)} en surveillance immédiate · {sent} alerte(s) Telegram envoyée(s)")
     print("Détection only. Vérifie chaque candidat manuellement avant tout trade.")
 
 

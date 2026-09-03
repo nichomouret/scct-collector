@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS tracked (
     last_score REAL, last_price REAL,
     status TEXT
 );
+
+CREATE TABLE IF NOT EXISTS alerts (
+    ticker TEXT PRIMARY KEY,
+    last_utc REAL
+);
 """
 
 TRACKED_COLS = ["ticker", "name", "first_utc", "first_price", "last_active_utc",
@@ -162,6 +167,23 @@ class Store:
     def tracked_delete(self, ticker: str):
         cur = self.conn.cursor()
         cur.execute(f"DELETE FROM tracked WHERE ticker = {self.ph}", (ticker.upper(),))
+        self.conn.commit()
+
+    # --- anti-spam des alertes ---
+    def alert_recent(self, ticker: str, cooldown_h: float = 24.0) -> bool:
+        """True si le ticker a déjà été alerté dans les cooldown_h dernières heures."""
+        import time as _t
+        cur = self.conn.cursor()
+        cur.execute(f"SELECT last_utc FROM alerts WHERE ticker = {self.ph}", (ticker.upper(),))
+        row = cur.fetchone()
+        return bool(row and row[0] and (_t.time() - row[0]) < cooldown_h * 3600)
+
+    def alert_mark(self, ticker: str):
+        import time as _t
+        cur = self.conn.cursor()
+        cur.execute(f"INSERT INTO alerts (ticker, last_utc) VALUES ({self.ph},{self.ph}) "
+                    f"ON CONFLICT (ticker) DO UPDATE SET last_utc=excluded.last_utc",
+                    (ticker.upper(), _t.time()))
         self.conn.commit()
 
     def count(self, table: str = "posts") -> int:
